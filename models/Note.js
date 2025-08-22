@@ -55,15 +55,14 @@ noteSchema.pre('validate', function () {
   }
   // withDate가 false인데 메타데이터가 있을 때
   if (!isWithDate && hasMeta) {
+    // 메타 데이터 삭제
+    if (!this.withDate) this.dateMeta = undefined;
     throw new Error('withDate=false cannot include dateMeta');
   }
 });
 
 // 메타데이터 초기화
 noteSchema.pre('save', function () {
-  // withDate=false이면 메타데이터 삭제
-  if (!this.withDate) this.dateMeta = undefined;
-
   if (!(this.withDate && this.dateMeta)) return;
 
   if (this.isModified('dateMeta.done')) {
