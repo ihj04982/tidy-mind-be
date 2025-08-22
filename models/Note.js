@@ -46,7 +46,7 @@ noteSchema.pre('validate', async function () {
 
   // task/reminder인데 withDate가 false 일 때
   if (isDateRequiredCategory && !isWithDate) {
-    throw new Error('Task/Reminder catregory requires withDate=true');
+    throw new Error('Task/Reminder category requires withDate=true');
   }
   // withDate가 true인데 메타데이터가 없을 때
   if (isWithDate && !hasMeta) {
