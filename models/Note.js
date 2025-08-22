@@ -5,6 +5,7 @@ const dateMetaSchema = new mongoose.Schema(
   {
     dueDate: { type: Date, required: true },
     done: { type: Boolean, default: false },
+    doneDate: { type: Date },
   },
   { _id: false },
 );
@@ -39,7 +40,7 @@ noteSchema.methods.toJSON = function () {
 };
 
 // dateMeta 검증
-noteSchema.pre('validate', async function () {
+noteSchema.pre('validate', function () {
   const isDateRequiredCategory = ['Task', 'Reminder'].includes(this.category);
   const isWithDate = this.withDate;
   const hasMeta = !!this.dateMeta;
@@ -55,6 +56,24 @@ noteSchema.pre('validate', async function () {
   // withDate가 false인데 메타데이터가 있을 때
   if (!isWithDate && hasMeta) {
     throw new Error('withDate=false cannot include dateMeta');
+  }
+});
+
+// 메타데이터 초기화
+noteSchema.pre('save', function () {
+  // withDate=false이면 메타데이터 삭제
+  if (!this.withDate) this.dateMeta = undefined;
+
+  if (!(this.withDate && this.dateMeta)) return;
+
+  if (this.isModified('dateMeta.done')) {
+    if (this.dateMeta.done) {
+      // done이 true인데 doneDate가 없으면 자동으로 기록
+      this.dateMeta.doneDate = this.dateMeta.doneDate ?? new Date();
+    } else {
+      // done이 false로 바뀌면 doneDate 초기화
+      this.dateMeta.doneDate = undefined;
+    }
   }
 });
 
