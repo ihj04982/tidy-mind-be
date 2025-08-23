@@ -75,6 +75,13 @@ noteSchema.methods.toJSON = function () {
 };
 
 noteSchema.pre('validate', function () {
+  if (this.category?.name && !this.category.color) {
+    const categoryData = CATEGORIES[this.category.name.toUpperCase()];
+    if (categoryData) {
+      this.category.color = categoryData.color;
+    }
+  }
+
   const withDateCategories = ['Task', 'Reminder'];
   const isWithDateCategory = withDateCategories.includes(this.category?.name);
   const hasCompletion = !!this.completion;
@@ -88,13 +95,6 @@ noteSchema.pre('validate', function () {
 });
 
 noteSchema.pre('save', function () {
-  if (this.category?.name && !this.category.color) {
-    const categoryData = CATEGORIES[this.category.name.toUpperCase()];
-    if (categoryData) {
-      this.category.color = categoryData.color;
-    }
-  }
-
   if (!this.completion) return;
 
   if (this.isModified('completion.isCompleted')) {
