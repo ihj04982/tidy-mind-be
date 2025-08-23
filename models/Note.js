@@ -1,11 +1,41 @@
 const mongoose = require('mongoose');
 
-// dateMeta: Note.withDate === true 일 때만 유효
-const dateMetaSchema = new mongoose.Schema(
+const CATEGORIES = {
+  TASK: {
+    name: 'Task',
+    color: '#3378FF',
+  },
+  IDEA: {
+    name: 'Idea',
+    color: '#63B6FF',
+  },
+  REMINDER: {
+    name: 'Reminder',
+    color: '#FD7642',
+  },
+  WORK: {
+    name: 'Work',
+    color: '#00B380',
+  },
+  GOAL: {
+    name: 'Goal',
+    color: '#7448F7',
+  },
+  PERSONAL: {
+    name: 'Personal',
+    color: '#FF8BB7',
+  },
+  OTHER: {
+    name: 'Other',
+    color: '#F5C3BD',
+  },
+};
+
+const completionSchema = new mongoose.Schema(
   {
     dueDate: { type: Date, required: true },
-    done: { type: Boolean, default: false },
-    doneDate: { type: Date },
+    isCompleted: { type: Boolean, default: false },
+    completedAt: { type: Date },
   },
   { _id: false },
 );
@@ -20,58 +50,58 @@ const noteSchema = new mongoose.Schema(
     },
     title: { type: String, required: true },
     content: { type: String, required: true },
+    images: [{ type: String }],
     category: {
-      type: String,
-      enum: ['Task', 'Reminder', 'Idea', 'Goal', 'Work', 'Personal', 'Other'],
-      required: true,
+      name: {
+        type: String,
+        enum: Object.values(CATEGORIES).map((cat) => cat.name),
+        required: true,
+      },
+      color: { type: String, required: true },
     },
-    pinned: { type: Boolean, default: false },
-    withDate: { type: Boolean, default: false },
-    dateMeta: dateMetaSchema,
+    completion: completionSchema,
   },
   { timestamps: true },
 );
 
-// JSON 파싱
+noteSchema.methods.getCategoryColor = function () {
+  return CATEGORIES[this.category?.name?.toUpperCase()]?.color;
+};
+
 noteSchema.methods.toJSON = function () {
   const obj = this._doc;
   delete obj.__v;
   return obj;
 };
 
-// dateMeta 검증
 noteSchema.pre('validate', function () {
-  const isDateRequiredCategory = ['Task', 'Reminder'].includes(this.category);
-  const isWithDate = this.withDate;
-  const hasMeta = !!this.dateMeta;
+  if (this.category?.name && !this.category.color) {
+    const categoryData = CATEGORIES[this.category.name.toUpperCase()];
+    if (categoryData) {
+      this.category.color = categoryData.color;
+    }
+  }
 
-  // task/reminder인데 withDate가 false 일 때
-  if (isDateRequiredCategory && !isWithDate) {
-    throw new Error('Task/Reminder category requires withDate=true');
+  const withDateCategories = ['Task', 'Reminder'];
+  const isWithDateCategory = withDateCategories.includes(this.category?.name);
+  const hasCompletion = !!this.completion;
+
+  if (isWithDateCategory && !hasCompletion) {
+    throw new Error(`${this.category.name} category requires completion data`);
   }
-  // withDate가 true인데 메타데이터가 없을 때
-  if (isWithDate && !hasMeta) {
-    throw new Error('withDate=true requires dateMeta');
-  }
-  // withDate가 false인데 메타데이터가 있을 때
-  if (!isWithDate && hasMeta) {
-    // 메타 데이터 삭제
-    if (!this.withDate) this.dateMeta = undefined;
-    throw new Error('withDate=false cannot include dateMeta');
+  if (hasCompletion && !this.completion.dueDate) {
+    throw new Error('Completion requires dueDate');
   }
 });
 
-// 메타데이터 초기화
 noteSchema.pre('save', function () {
-  if (!(this.withDate && this.dateMeta)) return;
+  if (!this.completion) return;
 
-  if (this.isModified('dateMeta.done')) {
-    if (this.dateMeta.done) {
-      // done이 true인데 doneDate가 없으면 자동으로 기록
-      this.dateMeta.doneDate = this.dateMeta.doneDate ?? new Date();
+  if (this.isModified('completion.isCompleted')) {
+    if (this.completion.isCompleted) {
+      this.completion.completedAt = this.completion.completedAt ?? new Date();
     } else {
-      // done이 false로 바뀌면 doneDate 초기화
-      this.dateMeta.doneDate = undefined;
+      this.completion.completedAt = undefined;
     }
   }
 });
