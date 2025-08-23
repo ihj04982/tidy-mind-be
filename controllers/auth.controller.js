@@ -1,6 +1,7 @@
 const bcrypt = require('bcryptjs');
 
 const User = require('../models/User');
+const validator = require('../utils/validator');
 
 const authController = {};
 
@@ -17,7 +18,23 @@ authController.register = async (req, res) => {
       });
     }
 
-    // 2) 이메일 중복 확인
+    // 2-1) 이메일 검증
+    if (!validator.validateEmail(email)) {
+      return res.status(422).json({
+        error: 'INVALID_EMAIL',
+        message: '올바른 이메일 주소 형식이 아닙니다.',
+      });
+    }
+
+    // 2-2) 비밀번호 검증
+    if (!validator.validatePassword(password)) {
+      return res.status(422).json({
+        error: 'WEAK_PASSWORD',
+        message: '비밀번호는 8~20자, 영문과 숫자를 포함해야 합니다.',
+      });
+    }
+
+    // 3) 이메일 중복 확인
     const existing = await User.findOne({ email }).lean();
     if (existing) {
       return res.status(409).json({
@@ -26,18 +43,18 @@ authController.register = async (req, res) => {
       });
     }
 
-    // 3) 비밀번호 해싱
+    // 4) 비밀번호 해싱
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    // 4) 유저 생성
+    // 5) 유저 생성
     const user = await User.create({
       name,
       email,
       password: hashedPassword,
     });
 
-    // 5) 성공 응답
+    // 6) 성공 응답
     return res.status(201).json({
       message: '회원가입 성공',
       user,
