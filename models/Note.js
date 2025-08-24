@@ -87,10 +87,10 @@ noteSchema.pre('validate', function () {
   const hasCompletion = !!this.completion;
 
   if (isWithDateCategory && !hasCompletion) {
-    throw new Error(`${this.category.name} category requires completion data`);
+    throw new Error(`${this.category.name} 카테고리는 완료 데이터가 필요합니다.`);
   }
   if (hasCompletion && !this.completion.dueDate) {
-    throw new Error('Completion requires dueDate');
+    throw new Error('완료 데이터에는 마감일이 필요합니다.');
   }
 });
 
