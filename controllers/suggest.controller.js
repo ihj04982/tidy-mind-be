@@ -4,15 +4,29 @@ require('dotenv').config();
 
 const suggestController = {};
 
+// AI 콘텐츠 제안 컨트롤러
+// req.body.content: 입력한 텍스트
+// req.body.images: 이미지 URL 배열 (선택사항)
+
 suggestController.suggestContent = async (req, res) => {
   const { content, images = [] } = req.body;
 
   try {
+    // 입력값 검증
     if (!content && (!images || images.length === 0)) {
-      throw new Error('Content or images are required');
+      return res.status(400).json({
+        error: 'VALIDATION_ERROR',
+        message: 'Content or images are required',
+      });
     }
 
-    console.log('Received content to categorize:', content);
+    // API 키 확인
+    if (!process.env.GROQ_API_KEY) {
+      return res.status(500).json({
+        error: 'SERVER_ERROR',
+        message: 'API key not configured',
+      });
+    }
 
     const groq = createGroq({
       apiKey: process.env.GROQ_API_KEY,
@@ -20,6 +34,7 @@ suggestController.suggestContent = async (req, res) => {
 
     const today = new Date().toISOString().split('T')[0];
 
+    // AI 메시지 배열 준비
     const messages = [];
 
     if (content || images.length > 0) {
@@ -54,45 +69,61 @@ suggestController.suggestContent = async (req, res) => {
       messages.push(userMessage);
     }
 
+    // 모델 선택: 이미지 유무에 따라 결정
     const modelToUse =
       images && images.length > 0 ? 'llama-3.2-90b-vision-preview' : 'llama-3.1-8b-instant';
 
-    console.log('Using model:', modelToUse);
-
+    // AI 프롬프트: 언어 동일 유지, 카테고리는 영어, Task/Reminder는 날짜 필수
     const { text } = await generateText({
       model: groq(modelToUse),
       system: `You are an AI assistant that helps organize thoughts and notes for people with ADHD.
       Today's date is: ${today}
 
-      CRITICAL LANGUAGE RULE - YOU MUST FOLLOW THIS:
-      1. First, detect the language of the user's input text
+      CRITICAL LANGUAGE RULE - YOU MUST FOLLOW THIS (!!!IMPORTANT!!!):
+      1. First, detect the language of the user's input text 
       2. Generate the "title" and "tags" in EXACTLY the same language as detected
-      3. For Korean titles: Create natural, grammatically correct Korean phrases
+      3. For Korean titles: Create natural, grammatically correct Korean phrases (!!!IMPORTANT!!!)
          - Use proper Korean grammar and word order
          - Make it concise and meaningful
          - Avoid literal translations or nonsensical combinations
-      4. Examples:
-         English inputs → English titles:
-         - "I need to buy groceries" → "Buy groceries"
-         - "Meeting with John tomorrow" → "Meeting with John"
-         - "Fix the broken printer" → "Fix printer"
+      4. Title Generation Guidelines:
+         - Extract the CORE PURPOSE from the input
+         - Remove unnecessary context, keep only essential info
+         - Be specific but concise
          
-         Korean inputs → Natural Korean titles:
+      5. Examples by category:
+         TASK Examples:
+         - "I need to buy groceries for dinner" → "Buy groceries"
+         - "Fix the broken printer in office" → "Fix office printer"
          - "장을 봐야 해" → "장보기"
-         - "내일 존과 미팅" → "존과 미팅"
-         - "숙제를 끝내야 함" → "숙제 완료하기"
-         - "친구 생일 선물 준비" → "생일 선물 준비"
-         - "운동하러 가야됨" → "운동 가기"
          - "보고서 작성해야 함" → "보고서 작성"
-      5. DO NOT translate between languages - maintain the original language
-      6. For Korean: Focus on creating natural, commonly used Korean expressions
+         
+         REMINDER Examples:
+         - "Don't forget mom's birthday next week" → "Mom's birthday"
+         - "Remember to take medicine at 2pm" → "Take medicine 2pm"
+         - "내일 약 먹기" → "약 복용"
+         - "친구 생일 잊지 말기" → "친구 생일"
+         
+         IDEA Examples:
+         - "What if we create an app for..." → "App creation idea"
+         - "새로운 앱 아이디어" → "앱 아이디어"
+         
+         WORK Examples:
+         - "Meeting with John about Q3 results" → "Q3 results meeting"
+         - "내일 존과 미팅" → "존과 미팅"
+      6. DO NOT translate between languages - maintain the original language
+      7. For Korean: Focus on creating natural, commonly used Korean expressions
 
       Analyze the given text and/or images and provide:
       1. A category from: Task, Idea, Reminder, Work, Goal, Personal, Other
       2. A short, descriptive title (max 6 words) that:
          - Uses the SAME LANGUAGE as the input
          - Is grammatically correct and natural sounding
-         - Captures the main point concisely
+         - Captures the MAIN ACTION or KEY POINT
+         - For Tasks: Start with action verb (Do, Buy, Send, Fix, Call, etc.)
+         - For Reminders: Include what to remember
+         - For Ideas: Capture the core concept
+         - Avoid filler words, focus on essential information
       3. Priority level: High, Medium, or Low
       4. Estimated time in minutes (for tasks/activities)
       5. Up to 3 relevant tags (single words) that:
@@ -100,13 +131,12 @@ suggestController.suggestContent = async (req, res) => {
          - Are meaningful and commonly used words
          - Relate directly to the content
       6. For Task and Reminder categories: ALWAYS provide a due date
-         - First, try to extract date from text (tomorrow, next week, Friday, etc.)
+         - First, try to extract date from text (tomorrow, next week, Friday, etc.) (!!!IMPORTANT!!!)
          - If no date mentioned, SUGGEST based on priority:
            * High priority: 1-2 days from today
            * Medium priority: 3-7 days from today  
            * Low priority: 7-14 days from today
          - Format: YYYY-MM-DD (e.g., "2025-08-26")
-         - Set dueDateSource: "extracted" if found in text, "suggested" if auto-generated
       7. If images are provided: Extract text, identify objects, understand context
       
       For images, consider:
@@ -132,21 +162,25 @@ suggestController.suggestContent = async (req, res) => {
         "priority": "High/Medium/Low",
         "estimatedTime": 30,
         "tags": ["tag1", "tag2", "tag3"],
-        "dueDate": "YYYY-MM-DD",
-        "dueDateSource": "extracted or suggested"
+        "dueDate": "YYYY-MM-DD"
       }
       
       IMPORTANT: For Task and Reminder categories, dueDate should be a date string like "2025-08-26", not null
       
-      STRICT RULES:
+      STRICT RULES FOR ACCURATE TITLES:
       1. NO COMMENTS in the JSON (no // or /* */ comments)
       2. Category and Priority: ALWAYS in English
-      3. Title and Tags: SAME language as input
-         - English input → English title/tags
-         - Korean input → Natural Korean title/tags (자연스러운 한국어 사용)
-      4. For null values, use null not "null"
-      5. Return ONLY the JSON object, nothing else
-      6. Korean titles should be natural and grammatically correct (올바른 한국어 문법)`,
+      3. Title Creation Process:
+         a) Identify the main subject/object
+         b) Identify the main action/verb
+         c) Keep only essential details
+         d) Use the same language as input
+      4. Common patterns for better titles:
+         - Tasks: [Verb] + [Object] (e.g., "Send report", "보고서 작성")
+         - Reminders: [Event/Item] + [Time if critical] (e.g., "Team meeting 3pm", "병원 예약")
+         - Ideas: [Concept] + [Type] (e.g., "Marketing strategy", "신제품 아이디어")
+      5. For null values, use null not "null"
+      6. Return ONLY the JSON object, nothing else`,
       messages:
         messages.length > 0
           ? messages
@@ -158,16 +192,12 @@ suggestController.suggestContent = async (req, res) => {
             ],
     });
 
-    console.log('AI raw response:', text);
-
-    // Clean up the response to handle potential issues
+    // JSON 파싱을 위한 특수문자 제거
     let cleanedText = text;
-    
-    // Remove any comments (// or /* */)
-    cleanedText = cleanedText.replace(/\/\/.*$/gm, ''); // Remove single-line comments
-    cleanedText = cleanedText.replace(/\/\*[\s\S]*?\*\//g, ''); // Remove multi-line comments
-    
-    // Try to parse the cleaned JSON
+    cleanedText = cleanedText.replace(/\/\/.*$/gm, '');
+    cleanedText = cleanedText.replace(/\/\*[\s\S]*?\*\//g, '');
+
+    // JSON 파싱: 실패시 기본값
     let parsed;
     try {
       parsed = JSON.parse(cleanedText);
@@ -175,7 +205,8 @@ suggestController.suggestContent = async (req, res) => {
       console.error('Failed to parse AI response:', parseError);
       console.error('Original text:', text);
       console.error('Cleaned text:', cleanedText);
-      // Provide a fallback response
+
+      // 파싱 실패시 기본값 설정
       parsed = {
         category: 'Other',
         title: content ? content.substring(0, 30) : 'Untitled',
@@ -183,34 +214,28 @@ suggestController.suggestContent = async (req, res) => {
         estimatedTime: null,
         tags: [],
         dueDate: null,
-        dueDateSource: null
+        dueDateSource: null,
       };
     }
+    // AI가 추천한 카테고리 검증: 만약 실수로 다른 카테고리 추천 했을 경우 Other로 설정
     const validCategories = ['Task', 'Idea', 'Reminder', 'Work', 'Goal', 'Personal', 'Other'];
-    const validPriorities = ['High', 'Medium', 'Low'];
-
     const finalCategory = validCategories.includes(parsed.category) ? parsed.category : 'Other';
-    const finalPriority = validPriorities.includes(parsed.priority) ? parsed.priority : 'Medium';
 
+    // Task/Reminder 마감일 처리
     let dueDate = null;
-    let dueDateSource = null;
     if ((finalCategory === 'Task' || finalCategory === 'Reminder') && parsed.dueDate) {
+      // YYYY-MM-DD 형식 검증
       if (/^\d{4}-\d{2}-\d{2}$/.test(parsed.dueDate)) {
-        dueDate = parsed.dueDate;
-        dueDateSource = parsed.dueDateSource || 'suggested';
+        const dateObj = new Date(parsed.dueDate);
+        if (!isNaN(dateObj.getTime())) {
+          dueDate = parsed.dueDate;
+        } else {
+          console.warn('Invalid date provided by AI:', parsed.dueDate);
+        }
       }
     }
 
-    console.log('Parsed response:', {
-      category: finalCategory,
-      title: parsed.title || 'Untitled',
-      priority: finalPriority,
-      estimatedTime: parsed.estimatedTime,
-      tags: parsed.tags,
-      dueDate: dueDate,
-      dueDateSource: dueDateSource,
-    });
-
+    // 카테고리별 색상
     const categoryColors = {
       Task: '#3378FF',
       Idea: '#63B6FF',
@@ -221,8 +246,9 @@ suggestController.suggestContent = async (req, res) => {
       Other: '#F5C3BD',
     };
 
+    // MongoDB 스키마 형식으로 response 생성
     const requiresCompletion = ['Task', 'Reminder'].includes(finalCategory);
-
+    
     const response = {
       _id: null,
       userId: null,
@@ -239,6 +265,7 @@ suggestController.suggestContent = async (req, res) => {
       updatedAt: new Date().toISOString(),
     };
 
+    // Task/Reminder completion 추가
     if (requiresCompletion && dueDate) {
       response.completion = {
         dueDate: new Date(dueDate).toISOString(),
@@ -247,38 +274,32 @@ suggestController.suggestContent = async (req, res) => {
       };
     }
 
-    console.log('Formatted response:', response);
-
     res.status(200).json(response);
   } catch (error) {
-    console.error('Error categorizing content:', error);
+    // 에러 로깅
+    console.error('Error categorizing content:', {
+      message: error.message,
+      stack: error.stack,
+      statusCode: error.statusCode,
+      timestamp: new Date().toISOString(),
+    });
 
-    if (error.message === 'Content or images are required') {
+    // 클라이언트 에러 (400)
+    if (error.statusCode === 400) {
       return res.status(400).json({
         status: 'fail',
         error: error.message,
       });
     }
-    const defaultResponse = {
-      _id: null,
-      userId: null,
-      title: 'Untitled',
-      content: content || '',
-      images: images || [],
-      category: {
-        name: 'Other',
-        color: '#757575',
-      },
-      completion: {
-        dueDate: null,
-        isCompleted: false,
-        completedAt: null,
-      },
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
 
-    res.status(200).json(defaultResponse);
+    // 서버 에러 (500)
+    if (error.statusCode === 500) {
+      return res.status(500).json({
+        status: 'error',
+        error: 'Internal server error',
+        message: process.env.NODE_ENV === 'development' ? error.message : 'Something went wrong',
+      });
+    }
   }
 };
 
