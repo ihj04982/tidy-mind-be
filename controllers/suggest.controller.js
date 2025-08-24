@@ -9,12 +9,17 @@ const suggestController = {};
 
 suggestController.suggestContent = async (req, res) => {
   const { content, images = [] } = req.body;
+  
+  // 실제 텍스트 내용이 있는지 확인
+  const trimmedContent = typeof content === 'string' ? content.trim() : '';
+  const hasValidContent = trimmedContent.length > 0;
+  const hasValidImages = Array.isArray(images) && images.length > 0;
 
   try {
-    if (!content && (!images || images.length === 0)) {
+    if (!hasValidContent && !hasValidImages) {
       return res.status(400).json({
         error: 'VALIDATION_ERROR',
-        message: 'Content or images are required',
+        message: '내용 또는 이미지가 필요합니다',
       });
     }
 
@@ -28,7 +33,7 @@ suggestController.suggestContent = async (req, res) => {
     if (images.length > IMAGE_CONFIG.maxCount) {
       return res.status(400).json({
         error: 'VALIDATION_ERROR',
-        message: `Maximum ${IMAGE_CONFIG.maxCount} images allowed`,
+        message: `최대 ${IMAGE_CONFIG.maxCount}개의 이미지만 업로드 가능합니다`,
       });
     }
 
@@ -38,7 +43,7 @@ suggestController.suggestContent = async (req, res) => {
       if (typeof imageUrl !== 'string') {
         return res.status(400).json({
           error: 'VALIDATION_ERROR',
-          message: 'Invalid image URL format',
+          message: '올바르지 않은 이미지 URL 형식입니다',
         });
       }
 
@@ -46,7 +51,7 @@ suggestController.suggestContent = async (req, res) => {
         return res.status(400).json({
           error: 'VALIDATION_ERROR',
           message:
-            'Only Cloudinary images are allowed. Please upload images through the provided upload widget.',
+            'Cloudinary 이미지만 허용됩니다. 제공된 업로드 위젯을 통해 이미지를 업로드해주세요.',
         });
       }
 
@@ -56,7 +61,7 @@ suggestController.suggestContent = async (req, res) => {
         if (url.protocol !== 'https:') {
           return res.status(400).json({
             error: 'VALIDATION_ERROR',
-            message: 'Images must use secure HTTPS protocol',
+            message: '이미지는 보안 HTTPS 프로토콜을 사용해야 합니다',
           });
         }
 
@@ -66,7 +71,7 @@ suggestController.suggestContent = async (req, res) => {
         console.error('URL validation error:', error);
         return res.status(400).json({
           error: 'VALIDATION_ERROR',
-          message: 'Invalid Cloudinary URL format',
+          message: '올바르지 않은 Cloudinary URL 형식입니다',
         });
       }
     }
@@ -75,7 +80,7 @@ suggestController.suggestContent = async (req, res) => {
     if (!process.env.GROQ_API_KEY) {
       return res.status(500).json({
         error: 'SERVER_ERROR',
-        message: 'API key not configured',
+        message: 'API 키가 설정되지 않았습니다',
       });
     }
 
@@ -88,16 +93,16 @@ suggestController.suggestContent = async (req, res) => {
     // 유저의 컨텐츠나 이미지 배열이 들어갈 array
     const messages = [];
 
-    if (content || images.length > 0) {
+    if (hasValidContent || validatedImages.length > 0) {
       const userMessage = {
         role: 'user',
         content: [],
       };
 
-      if (content) {
+      if (hasValidContent) {
         userMessage.content.push({
           type: 'text',
-          text: `Analyze and categorize this: ${content}`,
+          text: `Analyze and categorize this: ${trimmedContent}`,
         });
       }
 
@@ -233,29 +238,24 @@ suggestController.suggestContent = async (req, res) => {
           : [
               {
                 role: 'user',
-                content: `Analyze and categorize this: ${content || 'the provided images'}`,
+                content: `Analyze and categorize this: ${trimmedContent || 'the provided images'}`,
               },
             ],
     });
 
-    // 특수문자 제거
-    let cleanedText = text;
-    cleanedText = cleanedText.replace(/\/\/.*$/gm, '');
-    cleanedText = cleanedText.replace(/\/\*[\s\S]*?\*\//g, '');
-
-    // JSON 파싱: 실패시 기본값
+    // JSON 파싱 (주석 제거 없이 직접 파싱)
+    // AI 프롬프트에서 이미 "NO COMMENTS!"를 명시했으므로 주석이 없어야 함
     let parsed;
     try {
-      parsed = JSON.parse(cleanedText);
+      parsed = JSON.parse(text);
     } catch (parseError) {
       console.error('Failed to parse AI response:', parseError);
       console.error('Original text:', text);
-      console.error('Cleaned text:', cleanedText);
 
       // 파싱 실패시 기본값
       parsed = {
         category: 'Other',
-        title: content ? content.substring(0, 30) : 'Untitled',
+        title: trimmedContent ? trimmedContent.substring(0, 30) : 'Untitled',
         priority: 'Medium',
         estimatedTime: null,
         tags: [],
@@ -334,7 +334,7 @@ suggestController.suggestContent = async (req, res) => {
       _id: null,
       userId: null,
       title: parsed.title || 'Untitled',
-      content: content || '',
+      content: trimmedContent || '',
       images: processCloudinaryImages(validatedImages || []),
       category: {
         name: finalCategory,
@@ -348,7 +348,7 @@ suggestController.suggestContent = async (req, res) => {
 
     if (requiresCompletion && dueDate) {
       response.completion = {
-        dueDate: new Date(dueDate).toISOString(),
+        dueDate: dueDate,  // YYYY-MM-DD 형식 유지 (타임존 문제 방지)
         isCompleted: false,
         completedAt: null,
       };
@@ -363,20 +363,36 @@ suggestController.suggestContent = async (req, res) => {
       timestamp: new Date().toISOString(),
     });
 
-    if (error.statusCode === 400) {
-      return res.status(400).json({
-        status: 'fail',
-        error: error.message,
+    // AI API 관련 에러 (rate limit, timeout 등)
+    if (error.statusCode === 429) {
+      return res.status(429).json({
+        error: 'RATE_LIMIT_ERROR',
+        message: 'AI 서비스 요청 한도를 초과했습니다. 잠시 후 다시 시도해주세요.',
       });
     }
 
-    if (error.statusCode === 500) {
-      return res.status(500).json({
-        status: 'error',
-        error: 'Internal server error',
-        message: process.env.NODE_ENV === 'development' ? error.message : 'Something went wrong',
+    if (error.statusCode === 408 || error.message === 'AI_TIMEOUT') {
+      return res.status(408).json({
+        error: 'TIMEOUT_ERROR',
+        message: 'AI 처리 시간이 초과되었습니다. 내용을 줄이거나 이미지 개수를 줄여주세요.',
       });
     }
+
+    // AI API 에러
+    if (error.statusCode >= 400 && error.statusCode < 500) {
+      return res.status(400).json({
+        error: 'AI_API_ERROR',
+        message: 'AI 분석 중 오류가 발생했습니다. 입력 내용을 확인해주세요.',
+      });
+    }
+
+    // 서버 에러 (기본)
+    return res.status(500).json({
+      error: 'SERVER_ERROR',
+      message: process.env.NODE_ENV === 'development' 
+        ? `서버 오류: ${error.message}` 
+        : '서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.',
+    });
   }
 };
 
