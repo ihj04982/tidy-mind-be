@@ -1,4 +1,5 @@
 const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 
 const User = require('../models/User');
 const validator = require('../utils/validator');
@@ -124,6 +125,47 @@ authController.login = async (req, res) => {
     return res.status(500).json({
       error: 'SERVER_ERROR',
       message: '로그인 처리 중 문제가 발생했습니다.',
+    });
+  }
+};
+
+authController.authenticate = async (req, res, next) => {
+  const tokenString = req.headers.authorization;
+  if (!tokenString) {
+    return res.status(401).json({
+      error: 'NO_TOKEN',
+      message: '인증 토큰이 필요합니다.',
+    });
+  }
+
+  try {
+    const token = tokenString.replace('Bearer ', '');
+    const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+    const user = await User.findById(decoded._id);
+
+    if (!user) {
+      return res.status(401).json({
+        error: 'INVALID_TOKEN',
+        message: '유효하지 않은 토큰입니다.',
+      });
+    }
+
+    req.user = user;
+    req.userId = decoded._id;
+    next();
+  } catch (error) {
+    if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
+      return res.status(401).json({
+        error: 'INVALID_TOKEN',
+        message:
+          error.name === 'TokenExpiredError'
+            ? '토큰이 만료되었습니다.'
+            : '유효하지 않은 토큰입니다.',
+      });
+    }
+    return res.status(500).json({
+      error: 'SERVER_ERROR',
+      message: '인증 처리 중 문제가 발생했습니다.',
     });
   }
 };
