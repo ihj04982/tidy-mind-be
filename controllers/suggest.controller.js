@@ -268,7 +268,9 @@ suggestController.suggestContent = async (req, res) => {
     const finalCategory = validCategories.includes(parsed.category) ? parsed.category : 'Other';
 
     let dueDate = null;
-    if ((finalCategory === 'Task' || finalCategory === 'Reminder') && parsed.dueDate) {
+    const needsDueDate = (finalCategory === 'Task' || finalCategory === 'Reminder');
+    
+    if (needsDueDate && parsed.dueDate) {
       if (/^\d{4}-\d{2}-\d{2}$/.test(parsed.dueDate)) {
         const dateObj = new Date(parsed.dueDate);
         const today = new Date();
@@ -302,6 +304,15 @@ suggestController.suggestContent = async (req, res) => {
         const defaultDate = new Date(today.getTime() + 3 * 24 * 60 * 60 * 1000);
         dueDate = defaultDate.toISOString().split('T')[0];
       }
+    } else if (needsDueDate) {
+      // Task/Reminder인데 dueDate가 없는 경우 - 우선순위 기반 기본값 생성
+      console.log('No due date provided for Task/Reminder, generating default based on priority');
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const daysToAdd = parsed.priority === 'High' ? 1 : 
+                       parsed.priority === 'Low' ? 7 : 3;
+      const defaultDate = new Date(today.getTime() + daysToAdd * 24 * 60 * 60 * 1000);
+      dueDate = defaultDate.toISOString().split('T')[0];
     }
 
     const categoryColors = {
