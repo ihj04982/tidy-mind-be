@@ -4,7 +4,6 @@ require('dotenv').config();
 
 const suggestController = {};
 
-// AI 콘텐츠 제안 컨트롤러
 // req.body.content: 입력한 텍스트
 // req.body.images: 이미지 URL 배열 (선택사항)
 
@@ -12,7 +11,6 @@ suggestController.suggestContent = async (req, res) => {
   const { content, images = [] } = req.body;
 
   try {
-    // 입력값 검증
     if (!content && (!images || images.length === 0)) {
       return res.status(400).json({
         error: 'VALIDATION_ERROR',
@@ -20,7 +18,60 @@ suggestController.suggestContent = async (req, res) => {
       });
     }
 
-    // API 키 확인
+    // 이미지 validation 설정 (Cloudinary 전용)
+    const IMAGE_CONFIG = {
+      maxCount: 5,
+      cloudinaryPattern: /^https:\/\/res\.cloudinary\.com\//,
+    };
+
+    // 이미지 개수 validation
+    if (images.length > IMAGE_CONFIG.maxCount) {
+      return res.status(400).json({
+        error: 'VALIDATION_ERROR',
+        message: `Maximum ${IMAGE_CONFIG.maxCount} images allowed`,
+      });
+    }
+
+    // Cloudinary URL validation: Cloudinary를 통해서만 업로드 가능함
+    const validatedImages = [];
+    for (const imageUrl of images) {
+      if (typeof imageUrl !== 'string') {
+        return res.status(400).json({
+          error: 'VALIDATION_ERROR',
+          message: 'Invalid image URL format',
+        });
+      }
+
+      if (!IMAGE_CONFIG.cloudinaryPattern.test(imageUrl)) {
+        return res.status(400).json({
+          error: 'VALIDATION_ERROR',
+          message:
+            'Only Cloudinary images are allowed. Please upload images through the provided upload widget.',
+        });
+      }
+
+      try {
+        const url = new URL(imageUrl);
+
+        if (url.protocol !== 'https:') {
+          return res.status(400).json({
+            error: 'VALIDATION_ERROR',
+            message: 'Images must use secure HTTPS protocol',
+          });
+        }
+
+        validatedImages.push(imageUrl);
+        console.log('Cloudinary image validated:', imageUrl);
+      } catch (error) {
+        console.error('URL validation error:', error);
+        return res.status(400).json({
+          error: 'VALIDATION_ERROR',
+          message: 'Invalid Cloudinary URL format',
+        });
+      }
+    }
+
+    // API 키 validation
     if (!process.env.GROQ_API_KEY) {
       return res.status(500).json({
         error: 'SERVER_ERROR',
@@ -34,7 +85,7 @@ suggestController.suggestContent = async (req, res) => {
 
     const today = new Date().toISOString().split('T')[0];
 
-    // AI 메시지 배열 준비
+    // 유저의 컨텐츠나 이미지 배열이 들어갈 array
     const messages = [];
 
     if (content || images.length > 0) {
@@ -50,28 +101,23 @@ suggestController.suggestContent = async (req, res) => {
         });
       }
 
-      if (images && images.length > 0) {
-        images.forEach((imageUrl) => {
-          if (imageUrl.startsWith('http') || imageUrl.startsWith('https')) {
-            userMessage.content.push({
-              type: 'image',
-              image: imageUrl,
-            });
-          } else if (imageUrl.startsWith('data:')) {
-            userMessage.content.push({
-              type: 'image',
-              image: imageUrl,
-            });
-          }
+      if (validatedImages && validatedImages.length > 0) {
+        validatedImages.forEach((imageUrl) => {
+          userMessage.content.push({
+            type: 'image',
+            image: imageUrl,
+          });
         });
       }
 
       messages.push(userMessage);
     }
 
-    // 모델 선택: 이미지 유무에 따라 결정
+    // 모델 선택: 이미지 유무에 따라 결정됨 (현재 사용하는 무료 api key: 이미지 처리 불가/ 이미지처리는 다른 모델을 사용할 것 같음: 조사 필요함)
     const modelToUse =
-      images && images.length > 0 ? 'llama-3.2-90b-vision-preview' : 'llama-3.1-8b-instant';
+      validatedImages && validatedImages.length > 0
+        ? 'llama-3.2-90b-vision-preview'
+        : 'llama-3.1-8b-instant';
 
     // AI 프롬프트: 언어 동일 유지, 카테고리는 영어, Task/Reminder는 날짜 필수
     const { text } = await generateText({
@@ -192,7 +238,7 @@ suggestController.suggestContent = async (req, res) => {
             ],
     });
 
-    // JSON 파싱을 위한 특수문자 제거
+    // 특수문자 제거
     let cleanedText = text;
     cleanedText = cleanedText.replace(/\/\/.*$/gm, '');
     cleanedText = cleanedText.replace(/\/\*[\s\S]*?\*\//g, '');
@@ -206,7 +252,7 @@ suggestController.suggestContent = async (req, res) => {
       console.error('Original text:', text);
       console.error('Cleaned text:', cleanedText);
 
-      // 파싱 실패시 기본값 설정
+      // 파싱 실패시 기본값
       parsed = {
         category: 'Other',
         title: content ? content.substring(0, 30) : 'Untitled',
@@ -217,25 +263,47 @@ suggestController.suggestContent = async (req, res) => {
         dueDateSource: null,
       };
     }
-    // AI가 추천한 카테고리 검증: 만약 실수로 다른 카테고리 추천 했을 경우 Other로 설정
+    // AI가 실수로 다른 카테고리 추천 했을 경우 Other로 설정
     const validCategories = ['Task', 'Idea', 'Reminder', 'Work', 'Goal', 'Personal', 'Other'];
     const finalCategory = validCategories.includes(parsed.category) ? parsed.category : 'Other';
 
-    // Task/Reminder 마감일 처리
     let dueDate = null;
     if ((finalCategory === 'Task' || finalCategory === 'Reminder') && parsed.dueDate) {
-      // YYYY-MM-DD 형식 검증
       if (/^\d{4}-\d{2}-\d{2}$/.test(parsed.dueDate)) {
         const dateObj = new Date(parsed.dueDate);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
         if (!isNaN(dateObj.getTime())) {
-          dueDate = parsed.dueDate;
+          // 오늘 이전 날짜는 x
+          if (dateObj < today) {
+            console.warn('Past date provided, adjusting to today:', parsed.dueDate);
+            dueDate = today.toISOString().split('T')[0];
+          }
+          // 1년 이후 날짜는 x
+          else if (dateObj > new Date(today.getTime() + 365 * 24 * 60 * 60 * 1000)) {
+            console.warn('Date too far in future, adjusting to 1 year from today:', parsed.dueDate);
+            const oneYearLater = new Date(today.getTime() + 365 * 24 * 60 * 60 * 1000);
+            dueDate = oneYearLater.toISOString().split('T')[0];
+          } else {
+            dueDate = parsed.dueDate;
+          }
         } else {
-          console.warn('Invalid date provided by AI:', parsed.dueDate);
+          console.warn('Invalid date format provided by AI:', parsed.dueDate);
+          // AI가 추천해준 우선순위에 따른 기본 날짜 설정
+          const daysToAdd = parsed.priority === 'High' ? 1 : parsed.priority === 'Medium' ? 5 : 7;
+          const defaultDate = new Date(today.getTime() + daysToAdd * 24 * 60 * 60 * 1000);
+          dueDate = defaultDate.toISOString().split('T')[0];
         }
+      } else {
+        console.warn('Invalid date format, expected YYYY-MM-DD:', parsed.dueDate);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const defaultDate = new Date(today.getTime() + 3 * 24 * 60 * 60 * 1000);
+        dueDate = defaultDate.toISOString().split('T')[0];
       }
     }
 
-    // 카테고리별 색상
     const categoryColors = {
       Task: '#3378FF',
       Idea: '#63B6FF',
@@ -246,15 +314,28 @@ suggestController.suggestContent = async (req, res) => {
       Other: '#F5C3BD',
     };
 
-    // MongoDB 스키마 형식으로 response 생성
+    const processCloudinaryImages = (images) => {
+      return images.map((img) => {
+        // Cloudinary URL인 경우 자동 최적화 변환 추가
+        if (IMAGE_CONFIG.cloudinaryPattern.test(img)) {
+          if (!img.includes('/upload/')) {
+            return img;
+          }
+          const optimizedUrl = img.replace('/upload/', '/upload/q_auto,f_auto,w_1200/');
+          return optimizedUrl;
+        }
+        return img;
+      });
+    };
+
     const requiresCompletion = ['Task', 'Reminder'].includes(finalCategory);
-    
+
     const response = {
       _id: null,
       userId: null,
       title: parsed.title || 'Untitled',
       content: content || '',
-      images: images || [],
+      images: processCloudinaryImages(validatedImages || []),
       category: {
         name: finalCategory,
         color: categoryColors[finalCategory] || '#F5C3BD',
@@ -265,7 +346,6 @@ suggestController.suggestContent = async (req, res) => {
       updatedAt: new Date().toISOString(),
     };
 
-    // Task/Reminder completion 추가
     if (requiresCompletion && dueDate) {
       response.completion = {
         dueDate: new Date(dueDate).toISOString(),
@@ -276,7 +356,6 @@ suggestController.suggestContent = async (req, res) => {
 
     res.status(200).json(response);
   } catch (error) {
-    // 에러 로깅
     console.error('Error categorizing content:', {
       message: error.message,
       stack: error.stack,
@@ -284,7 +363,6 @@ suggestController.suggestContent = async (req, res) => {
       timestamp: new Date().toISOString(),
     });
 
-    // 클라이언트 에러 (400)
     if (error.statusCode === 400) {
       return res.status(400).json({
         status: 'fail',
@@ -292,7 +370,6 @@ suggestController.suggestContent = async (req, res) => {
       });
     }
 
-    // 서버 에러 (500)
     if (error.statusCode === 500) {
       return res.status(500).json({
         status: 'error',
