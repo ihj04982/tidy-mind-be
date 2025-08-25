@@ -358,8 +358,10 @@ suggestController.suggestContent = async (req, res) => {
     };
 
     if (requiresCompletion && dueDate) {
+      // MongoDB Date 타입과 호환되도록 ISO string으로 변환
+      const dueDateObj = new Date(dueDate + 'T12:00:00.000Z');
       response.completion = {
-        dueDate: dueDate,  // YYYY-MM-DD 형식 유지 (타임존 문제 방지)
+        dueDate: dueDateObj.toISOString(),
         isCompleted: false,
         completedAt: null,
       };
