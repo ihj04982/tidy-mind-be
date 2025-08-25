@@ -2,6 +2,13 @@ const { createGroq } = require('@ai-sdk/groq');
 const { generateText } = require('ai');
 require('dotenv').config();
 
+const PRIORITY_DAYS = {
+  High: 1,
+  Medium: 3,
+  Low: 7,
+  Default: 3
+};
+
 const suggestController = {};
 
 // req.body.content: 입력한 텍스트
@@ -206,7 +213,7 @@ suggestController.suggestContent = async (req, res) => {
       - Personal: Personal life, emotions, reflections, hobbies, relationships, self-care, daily life
       - Other: Only use if text truly doesn't fit any above category
       
-      Respond with ONLY valid JSON in this exact format (NO COMMENTS!):
+      Respond with ONLY valid JSON in this exact format (!!!NO COMMENTS!!!):
       {
         "category": "CategoryName",
         "title": "Short Descriptive Title",
@@ -243,8 +250,7 @@ suggestController.suggestContent = async (req, res) => {
             ],
     });
 
-    // JSON 파싱 (주석 제거 없이 직접 파싱)
-    // AI 프롬프트에서 이미 "NO COMMENTS!"를 명시했으므로 주석이 없어야 함
+    // JSON 파싱
     let parsed;
     try {
       parsed = JSON.parse(text);
@@ -252,7 +258,7 @@ suggestController.suggestContent = async (req, res) => {
       console.error('Failed to parse AI response:', parseError);
       console.error('Original text:', text);
 
-      // 파싱 실패시 기본값
+      // 파싱 기본값
       parsed = {
         category: 'Other',
         title: trimmedContent ? trimmedContent.substring(0, 30) : 'Untitled',
@@ -293,7 +299,7 @@ suggestController.suggestContent = async (req, res) => {
         } else {
           console.warn('Invalid date format provided by AI:', parsed.dueDate);
           // AI가 추천해준 우선순위에 따른 기본 날짜 설정
-          const daysToAdd = parsed.priority === 'High' ? 1 : parsed.priority === 'Medium' ? 5 : 7;
+          const daysToAdd = PRIORITY_DAYS[parsed.priority] || PRIORITY_DAYS.Default;
           const defaultDate = new Date(today.getTime() + daysToAdd * 24 * 60 * 60 * 1000);
           dueDate = defaultDate.toISOString().split('T')[0];
         }
@@ -301,7 +307,7 @@ suggestController.suggestContent = async (req, res) => {
         console.warn('Invalid date format, expected YYYY-MM-DD:', parsed.dueDate);
         const today = new Date();
         today.setHours(0, 0, 0, 0);
-        const defaultDate = new Date(today.getTime() + 3 * 24 * 60 * 60 * 1000);
+        const defaultDate = new Date(today.getTime() + PRIORITY_DAYS.Default * 24 * 60 * 60 * 1000);
         dueDate = defaultDate.toISOString().split('T')[0];
       }
     } else if (needsDueDate) {
@@ -309,8 +315,7 @@ suggestController.suggestContent = async (req, res) => {
       console.log('No due date provided for Task/Reminder, generating default based on priority');
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      const daysToAdd = parsed.priority === 'High' ? 1 : 
-                       parsed.priority === 'Low' ? 7 : 3;
+      const daysToAdd = PRIORITY_DAYS[parsed.priority] || PRIORITY_DAYS.Default;
       const defaultDate = new Date(today.getTime() + daysToAdd * 24 * 60 * 60 * 1000);
       dueDate = defaultDate.toISOString().split('T')[0];
     }
@@ -399,7 +404,7 @@ suggestController.suggestContent = async (req, res) => {
       });
     }
 
-    // 서버 에러 (기본)
+    // 서버 에러
     return res.status(500).json({
       error: 'SERVER_ERROR',
       message: process.env.NODE_ENV === 'development' 
