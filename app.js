@@ -1,14 +1,15 @@
-const bodyParser = require('body-parser');
 const cors = require('cors');
 const express = require('express');
 const mongoose = require('mongoose');
 require('dotenv').config();
 
+const routes = require('./routes/route');
+
 const app = express();
 
 app.use(cors());
-app.use(bodyParser.urlencoded({ extended: false }));
-app.use(bodyParser.json());
+app.use(express.json());
+app.use('/api', routes);
 
 const mongoUrl =
   process.env.NODE_ENV === 'production'
@@ -16,9 +17,7 @@ const mongoUrl =
     : process.env.LOCAL_DB_ADDRESS;
 
 mongoose
-  .connect(mongoUrl, {
-    useNewUrlParser: true,
-  })
+  .connect(mongoUrl)
   .then(() => console.log('Connected to Database:', mongoUrl))
   .catch((error) => console.log('Error connecting to Database:', error));
 
