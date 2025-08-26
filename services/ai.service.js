@@ -1,5 +1,3 @@
-const { openai } = require('@ai-sdk/openai');
-const { generateText } = require('ai');
 require('dotenv').config();
 
 const PRIORITY_DAYS = {
@@ -13,6 +11,23 @@ const IMAGE_CONFIG = {
   maxCount: 5,
   cloudinaryPattern: /^https:\/\/res\.cloudinary\.com\//,
 };
+
+let __aiModule = null;
+let __openaiModule = null;
+
+async function getAi() {
+  if (!__aiModule) {
+    __aiModule = await import('ai');
+  }
+  return __aiModule;
+}
+
+async function getOpenAI() {
+  if (!__openaiModule) {
+    __openaiModule = await import('@ai-sdk/openai');
+  }
+  return __openaiModule;
+}
 
 const aiService = {};
 
@@ -158,6 +173,9 @@ aiService.generateSuggestions = async (content, images = []) => {
   const modelToUse = 'gpt-4o-mini';
 
   try {
+    const { generateText } = await getAi();
+    const { openai } = await getOpenAI();
+    
     const { text } = await generateText({
       model: openai(modelToUse),
       system: `You are an AI assistant that helps organize thoughts and notes for people with ADHD.
