@@ -7,7 +7,9 @@ const authController = require('../controllers/auth.controller');
 router.post('/register', authController.register);
 // 로그인
 router.post('/login', authController.login);
-// 토큰 검증
+// 구글 로그인
+router.post('/google', authController.googleLogin);
+// 토큰 검증 - 유저 정보 반환
 router.get('/hydrate', authController.authenticate, authController.hydrate);
 
 module.exports = router;
