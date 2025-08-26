@@ -53,24 +53,7 @@ aiService.validateImages = (images) => {
       };
     }
 
-    // URL 형식 및 HTTPS 프로토콜 validation
-    try {
-      const url = new URL(imageUrl);
-      if (url.protocol !== 'https:') {
-        return {
-          isValid: false,
-          validatedImages: [],
-          error: '이미지는 보안 HTTPS 프로토콜을 사용해야 합니다',
-        };
-      }
-      validatedImages.push(imageUrl);
-    } catch (error) {
-      return {
-        isValid: false,
-        validatedImages: [],
-        error: '올바르지 않은 Cloudinary URL 형식입니다',
-      };
-    }
+    validatedImages.push(imageUrl);
   }
 
   return { isValid: true, validatedImages, error: null };

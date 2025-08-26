@@ -7,7 +7,7 @@ const suggestController = {};
 // param1: req.body.content - 분석할 텍스트 내용
 // param2: req.body.images - 이미지 URL 배열 (선택사항)
 // 리턴값: AI가 제안한 노트 메타데이터 (DB에 저장되지 않음)
- 
+
 suggestController.suggestContent = async (req, res) => {
   const { content, images = [] } = req.body;
 
