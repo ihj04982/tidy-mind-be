@@ -1,5 +1,6 @@
 require('dotenv').config();
 
+// 우선순위별 기본 마감일 설정 
 const PRIORITY_DAYS = {
   High: 1,
   Medium: 3,
@@ -7,27 +8,39 @@ const PRIORITY_DAYS = {
   Default: 3,
 };
 
+// 이미지
 const IMAGE_CONFIG = {
   maxCount: 5,
   cloudinaryPattern: /^https:\/\/res\.cloudinary\.com\//,
 };
 
+// 로컬 타임존 기준 YYYY-MM-DD 형식 변환
+const toLocalYMD = (date) => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
+
+// ESM 모듈 캐싱 변수
 let __aiModule = null;
 let __openaiModule = null;
 
-async function getAi() {
+// AI SDK 지연 로딩 (ESM 호환성)
+const getAi = async () => {
   if (!__aiModule) {
     __aiModule = await import('ai');
   }
   return __aiModule;
-}
+};
 
-async function getOpenAI() {
+// OpenAI SDK 지연 로딩 (ESM 호환성)
+const getOpenAI = async () => {
   if (!__openaiModule) {
     __openaiModule = await import('@ai-sdk/openai');
   }
   return __openaiModule;
-}
+};
 
 const aiService = {};
 
@@ -111,8 +124,8 @@ aiService.generateSuggestions = async (content, images = []) => {
     throw new Error('OPENAI_API_KEY가 설정되지 않았습니다');
   }
 
-  // 오늘 날짜 (dueDate 계산용)
-  const today = new Date().toISOString().split('T')[0];
+  // 오늘 날짜 (dueDate 계산용) - 로컬 타임존 기준
+  const today = toLocalYMD(new Date());
   const messages = [];
 
   // AI로 전송할 메시지 data structure
@@ -306,10 +319,8 @@ aiService.generateSuggestions = async (content, images = []) => {
     let parsed;
     try {
       parsed = JSON.parse(text);
-    } catch (parseError) {
+    } catch {
       // 파싱 실패 시 기본값
-      console.error('Failed to parse AI response:', parseError);
-      console.error('AI response was:', text);
       parsed = {
         category: 'Other',
         title: trimmedContent ? trimmedContent.substring(0, 30) : 'Untitled',
@@ -368,13 +379,13 @@ aiService.formatNoteFromSuggestions = (suggestions) => {
         // 과거 날짜는 오늘로 조정
         if (dateObj < today) {
           console.warn('Past date provided, adjusting to today:', parsed.dueDate);
-          dueDate = today.toISOString().split('T')[0];
+          dueDate = toLocalYMD(today);
         }
         // 1년 이상 미래 날짜는 1년 후로 조정
         else if (dateObj > new Date(today.getTime() + 365 * 24 * 60 * 60 * 1000)) {
           console.warn('Date too far in future, adjusting to 1 year from today:', parsed.dueDate);
           const oneYearLater = new Date(today.getTime() + 365 * 24 * 60 * 60 * 1000);
-          dueDate = oneYearLater.toISOString().split('T')[0];
+          dueDate = toLocalYMD(oneYearLater);
         } else {
           dueDate = parsed.dueDate;
         }
@@ -388,7 +399,7 @@ aiService.formatNoteFromSuggestions = (suggestions) => {
     today.setHours(0, 0, 0, 0);
     const daysToAdd = PRIORITY_DAYS[parsed.priority] || PRIORITY_DAYS.Default;
     const defaultDate = new Date(today.getTime() + daysToAdd * 24 * 60 * 60 * 1000);
-    dueDate = defaultDate.toISOString().split('T')[0];
+    dueDate = toLocalYMD(defaultDate);
   }
 
   // Task와 Reminder는 completion 필요함
