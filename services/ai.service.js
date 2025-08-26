@@ -1,7 +1,6 @@
-const { createGroq } = require('@ai-sdk/groq');
+const { openai } = require('@ai-sdk/openai');
 const { generateText } = require('ai');
 require('dotenv').config();
-
 
 const PRIORITY_DAYS = {
   High: 1,
@@ -39,7 +38,6 @@ aiService.validateImages = (images) => {
 
   // 각 이미지 URL 검증
   for (const imageUrl of images) {
-    // URL 문자열 타입 체크
     if (typeof imageUrl !== 'string') {
       return { isValid: false, validatedImages: [], error: '올바르지 않은 이미지 URL 형식입니다' };
     }
@@ -60,7 +58,7 @@ aiService.validateImages = (images) => {
 };
 
 // 2. Cloudinary 이미지 최적화
-// param: - cloudinary 이미지 URL
+// param: cloudinary 이미지 URL
 // 리턴값: 최적화된 이미지 URL (url에 /upload/q_auto,f_auto,w_1200/ 추가하면 브라우저에 맞는 최적 포맷으로 리사이징됨)
 
 aiService.processCloudinaryImages = (images) => {
@@ -94,14 +92,9 @@ aiService.generateSuggestions = async (content, images = []) => {
   }
 
   // API 키 확인
-  if (!process.env.GROQ_API_KEY) {
-    throw new Error('API 키가 설정되지 않았습니다');
+  if (!process.env.OPENAI_API_KEY) {
+    throw new Error('OPENAI_API_KEY가 설정되지 않았습니다');
   }
-
-  // Groq AI 클라이언트 초기화
-  const groq = createGroq({
-    apiKey: process.env.GROQ_API_KEY,
-  });
 
   // 오늘 날짜 (dueDate 계산용)
   const today = new Date().toISOString().split('T')[0];
@@ -114,11 +107,37 @@ aiService.generateSuggestions = async (content, images = []) => {
       content: [],
     };
 
-    // 텍스트 컨텐츠 추가
     if (hasValidContent) {
       userMessage.content.push({
         type: 'text',
         text: `Analyze and categorize this: ${trimmedContent}`,
+      });
+    } else if (validatedImages && validatedImages.length > 0) {
+      // 이미지만 있는 경우 프롬프트
+      userMessage.content.push({
+        type: 'text',
+        text: `Analyze these images carefully. IMPORTANT: Check if there's any Korean text in the images!
+        
+        LANGUAGE RULE (CRITICAL):
+        - If you see Korean text in the image → Generate title, summary in Korean
+        - If you see English text in the image → Generate title, summary in English
+        - If mixed languages → Use the dominant language
+        - 한글이 보이면 반드시 한국어로 응답하세요!
+        
+        Based on what you see:
+        1. Create a descriptive title that captures the main subject or action
+        2. Categorize appropriately (Task if it shows something to do, Reminder if it's time-sensitive, etc.)
+        3. Generate a helpful summary describing what's in the image(s) for the "summary" field
+        
+        For different types of images:
+        - 영수증: 상호명, 금액, 날짜, 구매 항목 추출
+        - 스크린샷: 앱/웹사이트 식별 및 주요 정보 설명
+        - 손글씨 메모: 읽을 수 있는 모든 텍스트 전사
+        - 사진: 장면, 주제, 활동 설명
+        - 문서: 핵심 포인트나 정보 요약
+        
+        The summary should be concise but informative (2-3 sentences).
+        언어를 정확히 감지하여 동일한 언어로 응답하세요!`,
       });
     }
 
@@ -135,29 +154,27 @@ aiService.generateSuggestions = async (content, images = []) => {
     messages.push(userMessage);
   }
 
+  // GPT-4o-mini 모델 사용 (비전 (이미지)) 기능 포함)
+  const modelToUse = 'gpt-4o-mini';
 
-  // Vision 모델 API 키 문제 해결 후 아래 주석 해제
-  const modelToUse = 'llama-3.1-8b-instant';
-  /* 
-  이미지가 있으면: vision 모델 (이미지 분석 가능) - 지금 사용하는 무료 API 키로 이 모델은 사용 불가 (chatgpt API key로 다른 모델로 바꿔서 test?)
-  이미지가 없으면: 일반 텍스트 모델
- 
-  const modelToUse =
-    validatedImages && validatedImages.length > 0 ? 'llama-3.2-90b-vision-preview' : 'llama-3.1-8b-instant';
-  */
-
-  const { text } = await generateText({
-    model: groq(modelToUse),
-    system: `You are an AI assistant that helps organize thoughts and notes for people with ADHD.
+  try {
+    const { text } = await generateText({
+      model: openai(modelToUse),
+      system: `You are an AI assistant that helps organize thoughts and notes for people with ADHD.
     Today's date is: ${today}
 
     CRITICAL LANGUAGE RULE - YOU MUST FOLLOW THIS (!!!IMPORTANT!!!):
-    1. First, detect the language of the user's input text 
-    2. Generate the "title" and "tags" in EXACTLY the same language as detected
+    1. First, detect the language from either:
+       - The user's input text (if provided)
+       - Text visible in images (OCR) - ESPECIALLY Korean text (한글)
+       - If Korean text is detected in image → MUST respond in Korean
+       - If English text is detected in image → respond in English
+    2. Generate the "title", "tags", and "summary" in EXACTLY the same language as detected
     3. For Korean titles: Create natural, grammatically correct Korean phrases (!!!IMPORTANT!!!)
        - Use proper Korean grammar and word order
        - Make it concise and meaningful
        - Avoid literal translations or nonsensical combinations
+    4. 이미지에 한글이 있으면 반드시 한국어로 제목과 요약을 작성하세요!
     4. Title Generation Guidelines:
        - Extract the CORE PURPOSE from the input
        - Remove unnecessary context, keep only essential info
@@ -234,7 +251,8 @@ aiService.generateSuggestions = async (content, images = []) => {
       "priority": "High/Medium/Low",
       "estimatedTime": 30,
       "tags": ["tag1", "tag2", "tag3"],
-      "dueDate": "YYYY-MM-DD"
+      "dueDate": "YYYY-MM-DD",
+      "summary": "Brief description of image content (only if image provided without text)"
     }
     
     IMPORTANT: For Task and Reminder categories, dueDate should be a date string like "2025-08-26", not null
@@ -253,39 +271,47 @@ aiService.generateSuggestions = async (content, images = []) => {
        - Ideas: [Concept] + [Type] (e.g., "Marketing strategy", "신제품 아이디어")
     5. For null values, use null not "null"
     6. Return ONLY the JSON object, nothing else`,
-    messages:
-      messages.length > 0
-        ? messages
-        : [
-            {
-              role: 'user',
-              content: `Analyze and categorize this: ${trimmedContent || 'the provided images'}`,
-            },
-          ],
-  });
+      messages:
+        messages.length > 0
+          ? messages
+          : [
+              {
+                role: 'user',
+                content: `Analyze and categorize this: ${trimmedContent || 'the provided images'}`,
+              },
+            ],
+      maxTokens: 1000, // 최대 토큰 (불필요한 긴 응답 방지)
+      temperature: 0.3, // 일관된 분류 (답이 약간의 변화, 주로 일관성 있는 답변)
+    });
 
-  // AI 응답 JSON 파싱
-  let parsed;
-  try {
-    parsed = JSON.parse(text);
-  } catch (parseError) {
-    // 파싱 실패 시 기본값
-    console.error('Failed to parse AI response:', parseError);
-    parsed = {
-      category: 'Other',
-      title: trimmedContent ? trimmedContent.substring(0, 30) : 'Untitled',
-      priority: 'Medium',
-      estimatedTime: null,
-      tags: [],
-      dueDate: null,
+    // AI 응답 JSON 파싱
+    let parsed;
+    try {
+      parsed = JSON.parse(text);
+    } catch (parseError) {
+      // 파싱 실패 시 기본값
+      console.error('Failed to parse AI response:', parseError);
+      console.error('AI response was:', text);
+      parsed = {
+        category: 'Other',
+        title: trimmedContent ? trimmedContent.substring(0, 30) : 'Untitled',
+        priority: 'Medium',
+        estimatedTime: null,
+        tags: [],
+        dueDate: null,
+        summary: null,
+      };
+    }
+
+    return {
+      parsed,
+      trimmedContent,
+      validatedImages: aiService.processCloudinaryImages(validatedImages),
     };
+  } catch (error) {
+    console.error('OpenAI API 호출 실패:', error);
+    throw new Error(`AI 분석 중 오류가 발생했습니다: ${error.message}`);
   }
-
-  return {
-    parsed,
-    trimmedContent,
-    validatedImages: aiService.processCloudinaryImages(validatedImages),
-  };
 };
 
 // 4. AI suggestions을 note data structure로 변환 후 리턴
@@ -351,9 +377,11 @@ aiService.formatNoteFromSuggestions = (suggestions) => {
   const requiresCompletion = ['Task', 'Reminder'].includes(finalCategory);
 
   // 최종 노트 data structure
+  // 이미지만 있는 경우: AI가 생성한 summary를 content로 사용
+  // 텍스트가 있는 경우: 원본 텍스트를 content로 사용
   const noteData = {
     title: parsed.title || 'Untitled',
-    content: trimmedContent || '',
+    content: trimmedContent || parsed.summary || '',
     images: validatedImages || [],
     category: {
       name: finalCategory,

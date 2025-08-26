@@ -20,6 +20,7 @@
   "license": "ISC",
   "dependencies": {
     "@ai-sdk/groq": "^2.0.14",
+    "@ai-sdk/openai": "^2.0.22",
     "ai": "^5.0.22",
     "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
