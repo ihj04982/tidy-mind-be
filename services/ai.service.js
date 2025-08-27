@@ -162,25 +162,53 @@ aiService.generateSuggestions = async (content, images = []) => {
       // 이미지만 있는 경우 프롬프트
       userMessage.content.push({
         type: 'text',
-        text: `Analyze these images carefully. IMPORTANT: Check if there's any Korean text in the images!
+        text: `Analyze these images carefully. IMPORTANT: Check for any text in the images!
         
-        LANGUAGE RULE (CRITICAL):
-        - If you see Korean text in the image → Generate title, summary in Korean
-        - If you see English text in the image → Generate title, summary in English
-        - If mixed languages → Use the dominant language
-        - 한글이 보이면 반드시 한국어로 응답하세요!
+        LANGUAGE RULE (CRITICAL - MUST FOLLOW):
+        - If you detect ENGLISH text in the image → Generate title, summary in English
+        - If NO English text is detected (Korean text, other languages, or no text at all) → Generate title, summary in KOREAN
+        - Default to KOREAN unless English text is clearly present
+        - 영어 텍스트가 없으면 반드시 한국어로 작성하세요!
         
         Based on what you see:
         1. Create a descriptive title that captures the main subject or action
         2. Categorize appropriately (Task if it shows something to do, Reminder if it's time-sensitive, etc.)
-        3. Generate a helpful summary describing what's in the image(s) for the "summary" field
+        3. Generate a natural, flowing summary for the "summary" field
+        
+        SUMMARY WRITING STYLE (IMPORTANT):
+        - Write in a natural, conversational tone as if describing to a friend
+        - Focus on what's interesting or important about the content
+        - NEVER use phrases like "The image shows", "The photo displays", "이 사진은", "이미지에는"
+        - Start directly with the subject: just describe what's there naturally
+        - Connect elements with flowing transitions
+        - Make it feel like a thoughtful observation, not a mechanical description
+        
+        Good examples (English):
+        - "A vibrant meal prep features quinoa and black beans topped with fresh avocado"
+        - "Meeting notes outline three key strategies for Q4 growth"
+        - "Tomorrow's dentist appointment at 3pm is circled twice for emphasis"
+        
+        Good examples (Korean):
+        - "퀴노아와 검은콩에 신선한 아보카도가 올려진 건강한 식사"
+        - "Q4 성장을 위한 세 가지 핵심 전략이 정리된 회의록"
+        - "내일 오후 3시 치과 예약이 두 번 동그라미로 강조되어 있음"
+        
+        Bad examples (English):
+        - "The image shows a meal with quinoa and beans"
+        - "This photo displays meeting notes"
+        - "The picture contains handwritten text"
+        
+        Bad examples (Korean):
+        - "이 사진은 퀴노아와 콩이 있는 식사를 보여줍니다"
+        - "이미지에 회의 노트가 표시되어 있습니다"
+        - "사진에 손글씨 텍스트가 포함되어 있습니다"
         
         For different types of images:
-        - 영수증: 상호명, 금액, 날짜, 구매 항목 추출
-        - 스크린샷: 앱/웹사이트 식별 및 주요 정보 설명
-        - 손글씨 메모: 읽을 수 있는 모든 텍스트 전사
-        - 사진: 장면, 주제, 활동 설명
-        - 문서: 핵심 포인트나 정보 요약
+        - 영수증: Focus on key purchase details and total amount
+        - 스크린샷: Highlight the main action or information
+        - 손글씨 메모: Transcribe naturally while noting any emphasis
+        - 사진: Describe the scene with vivid, engaging language
+        - 문서: Summarize key points in a clear, structured way
         
         The summary should be concise but informative (2-3 sentences).
         언어를 정확히 감지하여 동일한 언어로 응답하세요!`,
@@ -329,7 +357,7 @@ aiService.generateSuggestions = async (content, images = []) => {
                 content: `Analyze and categorize this: ${trimmedContent || 'the provided images'}`,
               },
             ],
-      maxTokens: 1000, // 최대 토큰 (불필요한 긴 응답 방지)
+      maxTokens: 1500, // 최대 토큰 (불필요한 긴 응답 방지)
       temperature: 0.3, // 일관된 분류 (답이 약간의 변화, 주로 일관성 있는 답변)
     });
 
