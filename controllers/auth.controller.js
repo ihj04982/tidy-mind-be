@@ -200,6 +200,31 @@ authController.googleLogin = async (req, res) => {
   }
 };
 
+// 토큰 검증 - 유저 정보 반환
+authController.hydrate = async (req, res) => {
+  try {
+    const user = await User.findById(req.userId);
+    if (!user) {
+      return res.status(401).json({
+        error: 'INVALID_TOKEN',
+        message: '유효하지 않은 토큰입니다.',
+      });
+    }
+
+    return res.status(200).json({
+      message: '토큰 검증 성공',
+      user,
+    });
+  } catch (error) {
+    console.error(error);
+
+    return res.status(500).json({
+      error: 'SERVER_ERROR',
+      message: '토큰 검증 중 문제가 발생했습니다.',
+    });
+  }
+};
+
 // 토큰 검증 미들웨어
 authController.authenticate = async (req, res, next) => {
   const tokenString = req.headers.authorization;
