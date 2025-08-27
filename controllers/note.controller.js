@@ -243,7 +243,7 @@ noteController.createNoteWithSuggestion = async (req, res) => {
       error: 'SERVER_ERROR',
       message: process.env.NODE_ENV === 'development' 
         ? `서버 오류: ${error.message}` 
-        : '노트 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.',
+        : '노트 저장 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.',
     });
   }
 };
