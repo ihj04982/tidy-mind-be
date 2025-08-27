@@ -200,7 +200,6 @@ aiService.generateSuggestions = async (content, images = []) => {
         title: trimmedContent ? trimmedContent.substring(0, 30) : 'Untitled',
         priority: 'Medium',
         dueDate: null,
-        summary: null,
       };
     }
 
