@@ -338,7 +338,7 @@ aiService.generateSuggestions = async (content, images = []) => {
       validatedImages: aiService.processCloudinaryImages(validatedImages),
     };
   } catch (error) {
-    console.error('OpenAI API 호출 실패:', error);
+    // OpenAI API 호출 실패
     throw new Error(`AI 분석 중 오류가 발생했습니다: ${error.message}`);
   }
 };
@@ -378,12 +378,12 @@ aiService.formatNoteFromSuggestions = (suggestions) => {
       if (!isNaN(dateObj.getTime())) {
         // 과거 날짜는 오늘로 조정
         if (dateObj < today) {
-          console.warn('Past date provided, adjusting to today:', parsed.dueDate);
+          // Past date provided, adjusting to today
           dueDate = toLocalYMD(today);
         }
         // 1년 이상 미래 날짜는 1년 후로 조정
         else if (dateObj > new Date(today.getTime() + 365 * 24 * 60 * 60 * 1000)) {
-          console.warn('Date too far in future, adjusting to 1 year from today:', parsed.dueDate);
+          // Date too far in future, adjusting to 1 year from today
           const oneYearLater = new Date(today.getTime() + 365 * 24 * 60 * 60 * 1000);
           dueDate = toLocalYMD(oneYearLater);
         } else {
@@ -416,18 +416,29 @@ aiService.formatNoteFromSuggestions = (suggestions) => {
       name: finalCategory,
       color: categoryColors[finalCategory] || '#F5C3BD',
     },
-    completion: null,
   };
 
-  // dueDate정보 추가 (Task/Reminder인 경우)
-  if (requiresCompletion && dueDate) {
-    // MongoDB Date 타입과 호환되도록 ISO string으로 변환
-    const dueDateObj = new Date(dueDate + 'T12:00:00.000Z');
-    noteData.completion = {
-      dueDate: dueDateObj.toISOString(),
-      isCompleted: false,
-      completedAt: null,
-    };
+  // completion 정보 추가 (Task/Reminder 카테고리만)
+  if (requiresCompletion) {
+    // dueDate가 없는 경우에도 completion 추가
+    if (dueDate) {
+      // MongoDB Date 타입과 호환되도록 ISO string으로 변환
+      const dueDateObj = new Date(dueDate + 'T12:00:00.000Z');
+      noteData.completion = {
+        dueDate: dueDateObj.toISOString(),
+        isCompleted: false,
+        completedAt: null,
+      };
+    } else {
+      // dueDate가 없으면 에러를 발생시키거나 기본값 설정
+      const today = new Date();
+      const defaultDate = new Date(today.getTime() + 3 * 24 * 60 * 60 * 1000);
+      noteData.completion = {
+        dueDate: defaultDate.toISOString(),
+        isCompleted: false,
+        completedAt: null,
+      };
+    }
   }
 
   return noteData;
