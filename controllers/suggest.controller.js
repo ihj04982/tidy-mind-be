@@ -29,14 +29,9 @@ suggestController.suggestContent = async (req, res) => {
 
     res.status(200).json(response);
   } catch (error) {
-    console.error('Error suggesting content:', {
-      message: error.message,
-      stack: error.stack,
-      statusCode: error.statusCode,
-      timestamp: new Date().toISOString(),
-    });
+    // Error logging removed for production
 
-    if (error.message === '내용 또는 이미지가 필요합니다') {
+    if (error.message === '텍스트 내용이 필요합니다') {
       return res.status(400).json({
         error: 'VALIDATION_ERROR',
         message: error.message,

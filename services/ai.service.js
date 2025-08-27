@@ -18,14 +18,11 @@ const IMAGE_CONFIG = {
 const createDueDateAtNoonUTC = (dateInput) => {
   let date;
   if (typeof dateInput === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateInput)) {
-    // YYYY-MM-DD string: set to noon UTC
     date = new Date(dateInput + 'T12:00:00.000Z');
   } else if (dateInput instanceof Date) {
-    // Already a Date: normalize to noon UTC
     date = new Date(dateInput);
     date.setUTCHours(12, 0, 0, 0);
   } else {
-    // Invalid input
     return null;
   }
   return date;
@@ -131,10 +128,9 @@ aiService.generateSuggestions = async (content, images = []) => {
   }
 
   const validatedImages = imageValidation.validatedImages;
-  const hasValidImages = validatedImages.length > 0;
 
-  if (!hasValidContent && !hasValidImages) {
-    throw new Error('내용 또는 이미지가 필요합니다');
+  if (!hasValidContent) {
+    throw new Error('텍스트 내용이 필요합니다');
   }
 
   // API 키 확인
@@ -146,87 +142,29 @@ aiService.generateSuggestions = async (content, images = []) => {
   const today = new Date().toISOString().split('T')[0];
   const messages = [];
 
-  // AI로 전송할 메시지 data structure
-  if (hasValidContent || validatedImages.length > 0) {
-    const userMessage = {
-      role: 'user',
-      content: [],
-    };
+  // AI로 전송할 메시지 data structure (텍스트는 필수)
+  const userMessage = {
+    role: 'user',
+    content: [],
+  };
 
-    if (hasValidContent) {
+  // 텍스트 컨텐츠 추가 (필수)
+  userMessage.content.push({
+    type: 'text',
+    text: `Analyze and categorize this: ${trimmedContent}`,
+  });
+
+  // 이미지 컨텐츠 추가 (선택사항)
+  if (validatedImages && validatedImages.length > 0) {
+    validatedImages.forEach((imageUrl) => {
       userMessage.content.push({
-        type: 'text',
-        text: `Analyze and categorize this: ${trimmedContent}`,
+        type: 'image',
+        image: imageUrl,
       });
-    } else if (validatedImages && validatedImages.length > 0) {
-      // 이미지만 있는 경우 프롬프트
-      userMessage.content.push({
-        type: 'text',
-        text: `Analyze these images carefully. IMPORTANT: Check for any text in the images!
-        
-        LANGUAGE RULE (CRITICAL - MUST FOLLOW):
-        - If you detect ENGLISH text in the image → Generate title, summary in English
-        - If NO English text is detected (Korean text, other languages, or no text at all) → Generate title, summary in KOREAN
-        - Default to KOREAN unless English text is clearly present
-        - 영어 텍스트가 없으면 반드시 한국어로 작성하세요!
-        
-        Based on what you see:
-        1. Create a descriptive title that captures the main subject or action
-        2. Categorize appropriately (Task if it shows something to do, Reminder if it's time-sensitive, etc.)
-        3. Generate a natural, flowing summary for the "summary" field
-        
-        SUMMARY WRITING STYLE (IMPORTANT):
-        - Write in a natural, conversational tone as if describing to a friend
-        - Focus on what's interesting or important about the content
-        - NEVER use phrases like "The image shows", "The photo displays", "이 사진은", "이미지에는"
-        - Start directly with the subject: just describe what's there naturally
-        - Connect elements with flowing transitions
-        - Make it feel like a thoughtful observation, not a mechanical description
-        
-        Good examples (English):
-        - "A vibrant meal prep features quinoa and black beans topped with fresh avocado"
-        - "Meeting notes outline three key strategies for Q4 growth"
-        - "Tomorrow's dentist appointment at 3pm is circled twice for emphasis"
-        
-        Good examples (Korean):
-        - "퀴노아와 검은콩에 신선한 아보카도가 올려진 건강한 식사"
-        - "Q4 성장을 위한 세 가지 핵심 전략이 정리된 회의록"
-        - "내일 오후 3시 치과 예약이 두 번 동그라미로 강조되어 있음"
-        
-        Bad examples (English):
-        - "The image shows a meal with quinoa and beans"
-        - "This photo displays meeting notes"
-        - "The picture contains handwritten text"
-        
-        Bad examples (Korean):
-        - "이 사진은 퀴노아와 콩이 있는 식사를 보여줍니다"
-        - "이미지에 회의 노트가 표시되어 있습니다"
-        - "사진에 손글씨 텍스트가 포함되어 있습니다"
-        
-        For different types of images:
-        - 영수증: Focus on key purchase details and total amount
-        - 스크린샷: Highlight the main action or information
-        - 손글씨 메모: Transcribe naturally while noting any emphasis
-        - 사진: Describe the scene with vivid, engaging language
-        - 문서: Summarize key points in a clear, structured way
-        
-        The summary should be concise but informative (2-3 sentences).
-        언어를 정확히 감지하여 동일한 언어로 응답하세요!`,
-      });
-    }
-
-    // 이미지 컨텐츠 추가
-    if (validatedImages && validatedImages.length > 0) {
-      validatedImages.forEach((imageUrl) => {
-        userMessage.content.push({
-          type: 'image',
-          image: imageUrl,
-        });
-      });
-    }
-
-    messages.push(userMessage);
+    });
   }
+
+  messages.push(userMessage);
 
   // GPT-4o-mini 모델 사용 (비전 (이미지)) 기능 포함)
   const modelToUse = 'gpt-4o-mini';
@@ -291,19 +229,14 @@ aiService.generateSuggestions = async (content, images = []) => {
        - For Ideas: Capture the core concept
        - Avoid filler words, focus on essential information
     3. Priority level: High, Medium, or Low
-    4. Estimated time in minutes (for tasks/activities)
-    5. Up to 3 relevant tags (single words) that:
-       - Use the SAME LANGUAGE as the input
-       - Are meaningful and commonly used words
-       - Relate directly to the content
-    6. For Task and Reminder categories: ALWAYS provide a due date
+    4. For Task and Reminder categories: ALWAYS provide a due date
        - First, try to extract date from text (tomorrow, next week, Friday, etc.) (!!!IMPORTANT!!!)
        - If no date mentioned, SUGGEST based on priority:
          * High priority: 1-2 days from today
          * Medium priority: 3-7 days from today  
          * Low priority: 7-14 days from today
        - Format: YYYY-MM-DD (e.g., "2025-08-26")
-    7. If images are provided: Extract text, identify objects, understand context
+    5. If images are provided: Extract text, identify objects, understand context
     
     For images, consider:
     - Screenshots of tasks, emails, or documents
@@ -326,10 +259,8 @@ aiService.generateSuggestions = async (content, images = []) => {
       "category": "CategoryName",
       "title": "Short Descriptive Title",
       "priority": "High/Medium/Low",
-      "estimatedTime": 30,
-      "tags": ["tag1", "tag2", "tag3"],
       "dueDate": "YYYY-MM-DD",
-      "summary": "Brief description of image content (only if image provided without text)"
+      "summary": "Brief description of image content (only if image provided with text)"
     }
     
     IMPORTANT: For Task and Reminder categories, dueDate should be a date string like "2025-08-26", not null
@@ -371,8 +302,6 @@ aiService.generateSuggestions = async (content, images = []) => {
         category: 'Other',
         title: trimmedContent ? trimmedContent.substring(0, 30) : 'Untitled',
         priority: 'Medium',
-        estimatedTime: null,
-        tags: [],
         dueDate: null,
         summary: null,
       };
@@ -399,16 +328,6 @@ aiService.formatNoteFromSuggestions = (suggestions) => {
   // 카테고리 validation (AI가 잘못된 카테고리 제안 시 'Other'로 대체)
   const validCategories = ['Task', 'Idea', 'Reminder', 'Work', 'Goal', 'Personal', 'Other'];
   const finalCategory = validCategories.includes(parsed.category) ? parsed.category : 'Other';
-
-  const categoryColors = {
-    Task: '#3378FF',
-    Idea: '#63B6FF',
-    Reminder: '#FD7642',
-    Work: '#00B380',
-    Goal: '#7448F7',
-    Personal: '#FF8BB7',
-    Other: '#F5C3BD',
-  };
 
   // dueDate 생성 (Task와 Reminder 카테고리만)
   let dueDate = null;
@@ -438,24 +357,20 @@ aiService.formatNoteFromSuggestions = (suggestions) => {
   const requiresCompletion = ['Task', 'Reminder'].includes(finalCategory);
 
   // 최종 노트 data structure
-  // 이미지만 있는 경우: AI가 생성한 summary를 content로 사용
-  // 텍스트가 있는 경우: 원본 텍스트를 content로 사용
   const noteData = {
     title: parsed.title || 'Untitled',
-    content: trimmedContent || parsed.summary || '',
+    content: trimmedContent || '',
     images: validatedImages || [],
     category: {
-      name: finalCategory,
-      color: categoryColors[finalCategory] || '#F5C3BD',
+      name: finalCategory
     },
   };
 
   // completion 정보 추가 (Task/Reminder 카테고리만)
   if (requiresCompletion) {
-    // dueDate should always exist for Task/Reminder, but add fallback just in case
     const finalDueDate = dueDate || generateDefaultDueDate();
     noteData.completion = {
-      dueDate: finalDueDate.toISOString(),
+      dueDate: finalDueDate,
       isCompleted: false,
       completedAt: null,
     };

@@ -187,7 +187,7 @@ noteController.createNoteWithSuggestion = async (req, res) => {
     });
 
     // validation 에러
-    if (error.message === '내용 또는 이미지가 필요합니다') {
+    if (error.message === '텍스트 내용이 필요합니다') {
       return res.status(400).json({
         error: 'VALIDATION_ERROR',
         message: error.message,
