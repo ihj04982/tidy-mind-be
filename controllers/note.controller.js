@@ -176,7 +176,7 @@ noteController.createNoteWithSuggestion = async (req, res) => {
     });
 
     return res.status(201).json({
-      message: '노트가 AI 제안과 함께 생성되었습니다.',
+      message: '노트가 AI 제안과 함께 저장되었습니다.',
       note,
     });
   } catch (error) {

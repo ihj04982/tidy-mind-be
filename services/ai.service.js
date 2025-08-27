@@ -14,7 +14,7 @@ const IMAGE_CONFIG = {
   cloudinaryPattern: /^https:\/\/res\.cloudinary\.com\//,
 };
 
-// 날짜를 UTC 정오로 설정 (타임존 문제 방지)
+// AI가 suggest한 날짜 ("dueDate": "YYYY-MM-DD" - 스트링)를 UTC 정오로 설정 (타임존 문제 방지) (Date object 리턴)
 const createDueDateAtNoonUTC = (dateInput) => {
   let date;
   if (typeof dateInput === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateInput)) {
@@ -28,10 +28,10 @@ const createDueDateAtNoonUTC = (dateInput) => {
   return date;
 };
 
-// 우선순위 기반 기본 마감일 생성
+// 우선순위 기반 기본 마감일 생성 (Date object 리턴)
 const generateDefaultDueDate = (priority = 'Medium') => {
   const date = new Date();
-  date.setUTCHours(12, 0, 0, 0); // Noon UTC
+  date.setUTCHours(12, 0, 0, 0);
   const daysToAdd = PRIORITY_DAYS[priority] || PRIORITY_DAYS.Default;
   date.setDate(date.getDate() + daysToAdd);
   return date;
@@ -193,11 +193,14 @@ aiService.generateSuggestions = async (content, images = []) => {
     let parsed;
     try {
       parsed = JSON.parse(text);
+      if (parsed.title === null || parsed.title === undefined) {
+        parsed.title = trimmedContent ? trimmedContent.substring(0, 30) : '제목없음';
+      }
     } catch {
       // 파싱 기본값
       parsed = {
         category: 'Other',
-        title: trimmedContent ? trimmedContent.substring(0, 30) : 'Untitled',
+        title: trimmedContent ? trimmedContent.substring(0, 30) : '제목없음',
         priority: 'Medium',
         dueDate: null,
       };
@@ -226,6 +229,7 @@ aiService.formatNoteFromSuggestions = (suggestions) => {
   const finalCategory = validCategories.includes(parsed.category) ? parsed.category : 'Other';
 
   // dueDate 생성 (Task와 Reminder 카테고리만)
+
   let dueDate = null;
   const needsDueDate = finalCategory === 'Task' || finalCategory === 'Reminder';
 
@@ -238,7 +242,6 @@ aiService.formatNoteFromSuggestions = (suggestions) => {
 
       // 과거 날짜는 우선순위에 따른 기본값으로 조정
       if (dueDate < today) {
-        // Past date: use high priority default (1 day)
         dueDate = generateDefaultDueDate('High');
       }
     }
@@ -253,8 +256,14 @@ aiService.formatNoteFromSuggestions = (suggestions) => {
   const requiresCompletion = ['Task', 'Reminder'].includes(finalCategory);
 
   // 최종 노트 data structure
+  // Ensure title is never null, empty string, or whitespace only
+  const finalTitle = (parsed.title && typeof parsed.title === 'string' && parsed.title.trim()) 
+    ? parsed.title.trim() 
+    : '제목없음';
+    
+  
   const noteData = {
-    title: parsed.title || 'Untitled',
+    title: finalTitle,
     content: trimmedContent || '',
     images: validatedImages || [],
     category: {

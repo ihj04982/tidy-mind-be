@@ -143,7 +143,7 @@ STRICT RULES FOR ACCURATE TITLES:
    - Tasks: [Verb] + [Object] (e.g., "Send report", "보고서 작성")
    - Reminders: [Event/Item] + [Time if critical] (e.g., "Team meeting 3pm", "병원 예약")
    - Ideas: [Concept] + [Type] (e.g., "Marketing strategy", "신제품 아이디어")
-5. For null values, use null not "null"
+5. For dueDate only (not title): if no date, use null not "null"
 6. Return ONLY the JSON object, nothing else
 7. IMAGE-BASED TITLES MUST BE IN KOREAN (!!!CRITICAL!!!)`;
 
