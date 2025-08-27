@@ -14,12 +14,30 @@ const IMAGE_CONFIG = {
   cloudinaryPattern: /^https:\/\/res\.cloudinary\.com\//,
 };
 
-// 로컬 타임존 기준 YYYY-MM-DD 형식 변환
-const toLocalYMD = (date) => {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
+// 날짜를 UTC 정오로 설정 (타임존 문제 방지)
+const createDueDateAtNoonUTC = (dateInput) => {
+  let date;
+  if (typeof dateInput === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateInput)) {
+    // YYYY-MM-DD string: set to noon UTC
+    date = new Date(dateInput + 'T12:00:00.000Z');
+  } else if (dateInput instanceof Date) {
+    // Already a Date: normalize to noon UTC
+    date = new Date(dateInput);
+    date.setUTCHours(12, 0, 0, 0);
+  } else {
+    // Invalid input
+    return null;
+  }
+  return date;
+};
+
+// 우선순위 기반 기본 마감일 생성
+const generateDefaultDueDate = (priority = 'Medium') => {
+  const date = new Date();
+  date.setUTCHours(12, 0, 0, 0); // Noon UTC
+  const daysToAdd = PRIORITY_DAYS[priority] || PRIORITY_DAYS.Default;
+  date.setDate(date.getDate() + daysToAdd);
+  return date;
 };
 
 // ESM 모듈 캐싱 변수
@@ -124,8 +142,8 @@ aiService.generateSuggestions = async (content, images = []) => {
     throw new Error('OPENAI_API_KEY가 설정되지 않았습니다');
   }
 
-  // 오늘 날짜 (dueDate 계산용) - 로컬 타임존 기준
-  const today = toLocalYMD(new Date());
+  // 오늘 날짜 (프롬프트용)
+  const today = new Date().toISOString().split('T')[0];
   const messages = [];
 
   // AI로 전송할 메시지 data structure
@@ -369,37 +387,23 @@ aiService.formatNoteFromSuggestions = (suggestions) => {
   const needsDueDate = finalCategory === 'Task' || finalCategory === 'Reminder';
 
   if (needsDueDate && parsed.dueDate) {
-    // 날짜 structure (YYYY-MM-DD)
-    if (/^\d{4}-\d{2}-\d{2}$/.test(parsed.dueDate)) {
-      const dateObj = new Date(parsed.dueDate);
+    dueDate = createDueDateAtNoonUTC(parsed.dueDate);
+    
+    if (dueDate) {
       const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      today.setUTCHours(0, 0, 0, 0);
 
-      if (!isNaN(dateObj.getTime())) {
-        // 과거 날짜는 오늘로 조정
-        if (dateObj < today) {
-          // Past date provided, adjusting to today
-          dueDate = toLocalYMD(today);
-        }
-        // 1년 이상 미래 날짜는 1년 후로 조정
-        else if (dateObj > new Date(today.getTime() + 365 * 24 * 60 * 60 * 1000)) {
-          // Date too far in future, adjusting to 1 year from today
-          const oneYearLater = new Date(today.getTime() + 365 * 24 * 60 * 60 * 1000);
-          dueDate = toLocalYMD(oneYearLater);
-        } else {
-          dueDate = parsed.dueDate;
-        }
+      // 과거 날짜는 우선순위에 따른 기본값으로 조정
+      if (dueDate < today) {
+        // Past date: use high priority default (1 day)
+        dueDate = generateDefaultDueDate('High');
       }
     }
   }
 
   // dueDate이 없는 경우 우선순위 기반 기본값 설정
   if (needsDueDate && !dueDate) {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const daysToAdd = PRIORITY_DAYS[parsed.priority] || PRIORITY_DAYS.Default;
-    const defaultDate = new Date(today.getTime() + daysToAdd * 24 * 60 * 60 * 1000);
-    dueDate = toLocalYMD(defaultDate);
+    dueDate = generateDefaultDueDate(parsed.priority);
   }
 
   // Task와 Reminder는 completion 필요함
@@ -420,25 +424,13 @@ aiService.formatNoteFromSuggestions = (suggestions) => {
 
   // completion 정보 추가 (Task/Reminder 카테고리만)
   if (requiresCompletion) {
-    // dueDate가 없는 경우에도 completion 추가
-    if (dueDate) {
-      // MongoDB Date 타입과 호환되도록 ISO string으로 변환
-      const dueDateObj = new Date(dueDate + 'T12:00:00.000Z');
-      noteData.completion = {
-        dueDate: dueDateObj.toISOString(),
-        isCompleted: false,
-        completedAt: null,
-      };
-    } else {
-      // dueDate가 없으면 에러를 발생시키거나 기본값 설정
-      const today = new Date();
-      const defaultDate = new Date(today.getTime() + 3 * 24 * 60 * 60 * 1000);
-      noteData.completion = {
-        dueDate: defaultDate.toISOString(),
-        isCompleted: false,
-        completedAt: null,
-      };
-    }
+    // dueDate should always exist for Task/Reminder, but add fallback just in case
+    const finalDueDate = dueDate || generateDefaultDueDate();
+    noteData.completion = {
+      dueDate: finalDueDate.toISOString(),
+      isCompleted: false,
+      completedAt: null,
+    };
   }
 
   return noteData;
