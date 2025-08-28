@@ -256,12 +256,6 @@ noteController.createNoteWithSuggestion = async (req, res) => {
       note,
     });
   } catch (error) {
-    console.error('Error creating note with suggestion:', {
-      message: error.message,
-      stack: error.stack,
-      timestamp: new Date().toISOString(),
-    });
-
     // validation 에러
     if (error.message === '텍스트 내용이 필요합니다') {
       return res.status(400).json({
