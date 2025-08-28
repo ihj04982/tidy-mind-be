@@ -5,6 +5,7 @@ const authController = require('../controllers/auth.controller');
 const noteController = require('../controllers/note.controller');
 
 router.post('/', authController.authenticate, noteController.create);
+router.post('/suggest', authController.authenticate, noteController.createNoteWithSuggestion);
 router.get('/', authController.authenticate, noteController.getNotes);
 
 router.get('/status', authController.authenticate, noteController.getNotesStatus);

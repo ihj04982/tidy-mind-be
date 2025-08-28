@@ -8,3 +8,4 @@ router.use('/auth', authRouter);
 router.use('/notes', noteRouter);
 
 module.exports = router;
+
