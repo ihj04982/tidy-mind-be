@@ -212,9 +212,8 @@ aiService.generateSuggestions = async (content, images = []) => {
       validatedImages: aiService.processCloudinaryImages(validatedImages),
     };
   } catch (error) {
-    // OpenAI API 호출 실패 - 원본 에러 전달하여 statusCode 보존
-    error.aiContext = 'AI 분석 중 오류가 발생했습니다';
-    throw error;
+    // OpenAI API 호출 실패
+    throw new Error(`AI 분석 중 오류가 발생했습니다: ${error.message}`);
   }
 };
 
@@ -257,7 +256,6 @@ aiService.formatNoteFromSuggestions = (suggestions) => {
   const requiresCompletion = ['Task', 'Reminder'].includes(finalCategory);
 
   // 최종 노트 data structure
-  // Ensure title is never null, empty string, or whitespace only
   const finalTitle = (parsed.title && typeof parsed.title === 'string' && parsed.title.trim()) 
     ? parsed.title.trim() 
     : '제목없음';
