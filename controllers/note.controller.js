@@ -187,7 +187,7 @@ noteController.getNotesStatus = async (req, res) => {
 
     // 요청한 날짜에 맞는 데이터 필터링
     const monthlyNotes = allNotes.filter((note) => {
-      const targetDate = note.completion?.completedAt || note.createdAt;
+      const targetDate = note.completion?.dueDate;
       const year = targetDate.getFullYear();
       const month = targetDate.getMonth() + 1;
 
@@ -200,7 +200,7 @@ noteController.getNotesStatus = async (req, res) => {
     monthlyNotes
       .filter((note) => note.completion.isCompleted === true)
       .forEach((note) => {
-        const completeDate = new Date(note.completion.completedAt);
+        const completeDate = new Date(note.completion.dueDate);
         const dateKey = completeDate.toISOString().slice(0, 10);
         countsByDate[dateKey] = (countsByDate[dateKey] || 0) + 1;
       });
