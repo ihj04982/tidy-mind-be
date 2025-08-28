@@ -294,13 +294,6 @@ noteController.createNoteWithSuggestion = async (req, res) => {
       });
     }
 
-    if (httpStatus === 408) {
-      return res.status(408).json({
-        error: 'TIMEOUT_ERROR',
-        message: 'AI 처리 시간이 초과되었습니다. 내용을 줄이거나 이미지 개수를 줄여주세요.',
-      });
-    }
-
     if (httpStatus >= 400 && httpStatus < 500) {
       return res.status(400).json({
         error: 'AI_API_ERROR',
