@@ -156,4 +156,80 @@ noteController.deleteNote = async (req, res) => {
   }
 };
 
+// 히트맵
+noteController.getNotesStatus = async (req, res) => {
+  try {
+    const userId = req.userId;
+    const { year, month } = req.query;
+
+    const yearNum = parseInt(year);
+    const monthNum = parseInt(month);
+
+    if (!yearNum || !monthNum) {
+      return res.status(400).json({
+        error: 'VALIDATION_ERROR',
+        message: 'year, month 파라미터가 필요합니다.',
+      });
+    }
+
+    if (yearNum < 1900 || yearNum > 2100 || monthNum < 1 || monthNum > 12) {
+      return res.status(400).json({
+        error: 'VALIDATION_ERROR',
+        message: '올바른 날짜를 입력해주세요.',
+      });
+    }
+
+    // All Completed Task, Reminder
+    const allNotes = await Note.find({
+      userId,
+      'category.name': { $in: ['Task', 'Reminder'] },
+    });
+
+    // 요청한 날짜에 맞는 데이터 필터링
+    const monthlyNotes = allNotes.filter((note) => {
+      const targetDate = note.completion?.dueDate;
+      const year = targetDate.getFullYear();
+      const month = targetDate.getMonth() + 1;
+
+      return year === yearNum && month === monthNum;
+    });
+
+    // 일자 별 Completed Data Count
+    const countsByDate = {};
+
+    monthlyNotes
+      .filter((note) => note.completion.isCompleted === true)
+      .forEach((note) => {
+        const completeDate = new Date(note.completion.dueDate);
+        const dateKey = completeDate.toISOString().slice(0, 10);
+        countsByDate[dateKey] = (countsByDate[dateKey] || 0) + 1;
+      });
+
+    const endDate = new Date(yearNum, monthNum, 0).getDate();
+
+    const dailyCounts = {};
+
+    for (let d = 1; d <= endDate; d++) {
+      const key = `${yearNum}-${monthNum.toString().padStart(2, '0')}-${d.toString().padStart(2, '0')}`;
+      dailyCounts[key] = countsByDate[key] || 0;
+    }
+
+    const total = Object.values(dailyCounts).reduce((acc, val) => acc + val, 0);
+
+    return res.status(200).json({
+      message: 'Get Completed Data Success.',
+      data: {
+        dailyCounts,
+        monthlyNotes,
+        total,
+      },
+    });
+  } catch (error) {
+    return res.status(400).json({
+      error: 'VALIDATION_ERROR',
+      message: error.message,
+    });
+  }
+};
+
 module.exports = noteController;
