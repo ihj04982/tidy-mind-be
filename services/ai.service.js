@@ -135,7 +135,7 @@ aiService.generateSuggestions = async (content, images = []) => {
 
   // API 키 확인
   if (!process.env.OPENAI_API_KEY) {
-    throw new Error('OPENAI_API_KEY가 설정되지 않았습니다');
+    throw new Error('API 키가 설정되지 않았습니다');
   }
 
   // 오늘 날짜 (프롬프트용)
@@ -212,8 +212,9 @@ aiService.generateSuggestions = async (content, images = []) => {
       validatedImages: aiService.processCloudinaryImages(validatedImages),
     };
   } catch (error) {
-    // OpenAI API 호출 실패
-    throw new Error(`AI 분석 중 오류가 발생했습니다: ${error.message}`);
+    // OpenAI API 호출 실패 - 원본 에러 전달하여 statusCode 보존
+    error.aiContext = 'AI 분석 중 오류가 발생했습니다';
+    throw error;
   }
 };
 

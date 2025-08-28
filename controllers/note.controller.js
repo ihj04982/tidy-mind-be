@@ -208,22 +208,24 @@ noteController.createNoteWithSuggestion = async (req, res) => {
       });
     }
 
-    // AI API 에러
-    if (error.statusCode === 429) {
+    // AI API 에러 - OpenAI SDK - 'status'
+    const httpStatus = error.status || error.statusCode || error.response?.status;
+    
+    if (httpStatus === 429) {
       return res.status(429).json({
         error: 'RATE_LIMIT_ERROR',
         message: 'AI 서비스 요청 한도를 초과했습니다. 잠시 후 다시 시도해주세요.',
       });
     }
 
-    if (error.statusCode === 408 || error.message === 'AI_TIMEOUT') {
+    if (httpStatus === 408) {
       return res.status(408).json({
         error: 'TIMEOUT_ERROR',
         message: 'AI 처리 시간이 초과되었습니다. 내용을 줄이거나 이미지 개수를 줄여주세요.',
       });
     }
 
-    if (error.statusCode >= 400 && error.statusCode < 500) {
+    if (httpStatus >= 400 && httpStatus < 500) {
       return res.status(400).json({
         error: 'AI_API_ERROR',
         message: 'AI 분석 중 오류가 발생했습니다. 입력 내용을 확인해주세요.',
