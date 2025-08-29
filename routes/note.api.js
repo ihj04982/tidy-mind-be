@@ -7,7 +7,7 @@ const noteController = require('../controllers/note.controller');
 router.post('/', authController.authenticate, noteController.create);
 router.get('/', authController.authenticate, noteController.getNotes);
 
-router.get('/status', authController.authenticate, noteController.getNotesStatics);
+router.get('/statics', authController.authenticate, noteController.getNotesStatics);
 
 router.get('/:id', authController.authenticate, noteController.getNote);
 router.put('/:id', authController.authenticate, noteController.updateNote);

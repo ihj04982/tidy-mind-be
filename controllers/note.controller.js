@@ -38,7 +38,7 @@ noteController.create = async (req, res) => {
 
 // 노트 목록 조회
 noteController.getNotes = async (req, res) => {
-  const { category, isCompleted } = req.query;
+  const { category } = req.query;
   const userId = req.userId;
 
   try {
@@ -46,10 +46,6 @@ noteController.getNotes = async (req, res) => {
 
     if (category) {
       query['category.name'] = category;
-    }
-
-    if (isCompleted !== undefined) {
-      query['completion.isCompleted'] = isCompleted === 'true';
     }
 
     const notes = await Note.find(query).sort({ createdAt: -1 }).lean();
