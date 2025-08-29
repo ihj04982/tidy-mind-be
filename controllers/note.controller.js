@@ -81,7 +81,7 @@ noteController.getNote = async (req, res) => {
       message: '노트를 조회했습니다.',
       note,
     });
-  } catch (error) {
+  } catch {
     return res.status(400).json({
       error: 'INVALID_ID',
       message: '올바르지 않은 노트 ID입니다.',
@@ -115,13 +115,12 @@ noteController.updateNote = async (req, res) => {
         note.completion = {};
       }
 
-      const wasCompleted = note.completion.isCompleted;
-
-      Object.assign(note.completion, completion);
-
-      if (completion.isCompleted !== undefined && completion.isCompleted !== wasCompleted) {
-        note.completion.completedAt = completion.isCompleted ? new Date() : undefined;
+      const sanitizedCompletion = { ...completion };
+      if (Object.prototype.hasOwnProperty.call(sanitizedCompletion, 'completedAt')) {
+        delete sanitizedCompletion.completedAt;
       }
+
+      Object.assign(note.completion, sanitizedCompletion);
     }
 
     await note.save();
@@ -156,7 +155,7 @@ noteController.deleteNote = async (req, res) => {
     return res.status(200).json({
       message: '노트가 삭제되었습니다.',
     });
-  } catch (error) {
+  } catch {
     return res.status(400).json({
       error: 'INVALID_ID',
       message: '올바르지 않은 노트 ID입니다.',
