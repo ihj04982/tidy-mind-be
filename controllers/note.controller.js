@@ -109,12 +109,24 @@ noteController.updateNote = async (req, res) => {
       });
     }
 
-    // 부분 업데이트
     if (title !== undefined) note.title = title;
     if (content !== undefined) note.content = content;
     if (images !== undefined) note.images = images;
     if (category !== undefined) note.category = category;
-    if (completion !== undefined) note.completion = completion;
+
+    if (completion !== undefined) {
+      if (!note.completion) {
+        note.completion = {};
+      }
+
+      const wasCompleted = note.completion.isCompleted;
+
+      Object.assign(note.completion, completion);
+
+      if (completion.isCompleted !== undefined && completion.isCompleted !== wasCompleted) {
+        note.completion.completedAt = completion.isCompleted ? new Date() : undefined;
+      }
+    }
 
     await note.save();
 
@@ -157,7 +169,7 @@ noteController.deleteNote = async (req, res) => {
 };
 
 // 히트맵
-noteController.getNotesStatus = async (req, res) => {
+noteController.getNotesStatics = async (req, res) => {
   try {
     const userId = req.userId;
     const { year, month } = req.query;
