@@ -8,7 +8,7 @@ router.post('/', authController.authenticate, noteController.create);
 router.post('/suggest', authController.authenticate, noteController.createNoteWithSuggestion);
 router.get('/', authController.authenticate, noteController.getNotes);
 
-router.get('/status', authController.authenticate, noteController.getNotesStatus);
+router.get('/statics', authController.authenticate, noteController.getNotesStatics);
 
 router.get('/:id', authController.authenticate, noteController.getNote);
 router.put('/:id', authController.authenticate, noteController.updateNote);

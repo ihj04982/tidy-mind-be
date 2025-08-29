@@ -39,7 +39,7 @@ noteController.create = async (req, res) => {
 
 // 노트 목록 조회
 noteController.getNotes = async (req, res) => {
-  const { category, isCompleted } = req.query;
+  const { category } = req.query;
   const userId = req.userId;
 
   try {
@@ -47,10 +47,6 @@ noteController.getNotes = async (req, res) => {
 
     if (category) {
       query['category.name'] = category;
-    }
-
-    if (isCompleted !== undefined) {
-      query['completion.isCompleted'] = isCompleted === 'true';
     }
 
     const notes = await Note.find(query).sort({ createdAt: -1 }).lean();
@@ -86,7 +82,7 @@ noteController.getNote = async (req, res) => {
       message: '노트를 조회했습니다.',
       note,
     });
-  } catch (error) {
+  } catch {
     return res.status(400).json({
       error: 'INVALID_ID',
       message: '올바르지 않은 노트 ID입니다.',
@@ -110,12 +106,23 @@ noteController.updateNote = async (req, res) => {
       });
     }
 
-    // 부분 업데이트
     if (title !== undefined) note.title = title;
     if (content !== undefined) note.content = content;
     if (images !== undefined) note.images = images;
     if (category !== undefined) note.category = category;
-    if (completion !== undefined) note.completion = completion;
+
+    if (completion !== undefined) {
+      if (!note.completion) {
+        note.completion = {};
+      }
+
+      const sanitizedCompletion = { ...completion };
+      if (Object.prototype.hasOwnProperty.call(sanitizedCompletion, 'completedAt')) {
+        delete sanitizedCompletion.completedAt;
+      }
+
+      Object.assign(note.completion, sanitizedCompletion);
+    }
 
     await note.save();
 
@@ -149,7 +156,7 @@ noteController.deleteNote = async (req, res) => {
     return res.status(200).json({
       message: '노트가 삭제되었습니다.',
     });
-  } catch (error) {
+  } catch {
     return res.status(400).json({
       error: 'INVALID_ID',
       message: '올바르지 않은 노트 ID입니다.',
@@ -158,7 +165,7 @@ noteController.deleteNote = async (req, res) => {
 };
 
 // 히트맵
-noteController.getNotesStatus = async (req, res) => {
+noteController.getNotesStatics = async (req, res) => {
   try {
     const userId = req.userId;
     const { year, month } = req.query;
