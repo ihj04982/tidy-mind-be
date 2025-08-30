@@ -212,6 +212,9 @@ For Task & Reminder (REQUIRED):
 
 Extract from text first:
 
+First, try to extract date from text (tomorrow, next week, Friday, etc.)
+먼저, 텍스트에서 날짜를 추출합니다 (오늘, 내일, 다음 주, 금요일, 3일 후 등)
+
 Parse: "tomorrow", "next Friday", "in 3 days"
 Convert to YYYY-MM-DD format
 
